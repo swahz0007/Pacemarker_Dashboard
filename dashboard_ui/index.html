@@ -5,12 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pacemaker Dashboard</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=109">
     <!-- Google Fonts for Medical Aesthetic -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://npm.elemecdn.com/lxgw-wenkai-screen-webfont@1.1.0/style.css" media="print"
+        onload="this.media='all'">
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </head>
 
 <body>
@@ -18,7 +20,7 @@
         <!-- Sidebar: Patient List -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>起搏器 <span class="highlight">数据中心</span></h2>
+                <h2>起搏器程控报告查询系统</h2>
                 <div class="search-box">
                     <input type="text" id="patientSearch" placeholder="搜索姓名或登记号...">
                 </div>
@@ -38,7 +40,7 @@
             <div id="emptyState" class="empty-state">
                 <div class="icon">🫀</div>
                 <h3>请在左侧选择一位患者</h3>
-                <p>查看详细的程控记录、趋势分析及设备状态。</p>
+                <p>查看详细的程控记录及设备状态。</p>
             </div>
 
             <!-- Detail View (Hidden by default) -->
@@ -68,7 +70,7 @@
                 <!-- Navigation Tabs -->
                 <nav class="detail-tabs">
                     <button class="tab-btn active" data-tab="overview">总览</button>
-                    <button class="tab-btn" data-tab="trends">趋势分析</button>
+
                     <button class="tab-btn" data-tab="records">程控历史</button>
                 </nav>
 
@@ -93,58 +95,32 @@
                                 </div>
                             </div>
 
-                            <!-- Battery Card -->
-                            <div class="card highlight-card">
-                                <h3><span class="icon">🔋</span> 电池状态</h3>
-                                <div class="card-body">
-                                    <div class="metric-group">
-                                        <div class="metric-large">
-                                            <span id="batStatus">--</span> <small>V</small>
-                                        </div>
-                                        <div class="metric-sub" id="batLife">预估 -- 年</div>
-                                    </div>
-                                    <div class="status-indicator" id="batIndicator"></div>
+                            <!-- Battery + Mode Card (combined) -->
+                            <div class="card highlight-card compact-card">
+                                <h3><span class="icon">🔋</span> 电池与起搏</h3>
+                                <div class="compact-content">
+                                    <span class="compact-item">
+                                        <span class="item-label">电池</span>
+                                        <span class="item-value"><span id="batStatus">--</span> V</span>
+                                        <span class="item-sub" id="batLife">预估 -- 年</span>
+                                    </span>
+                                    <span class="compact-divider">|</span>
+                                    <span class="compact-item">
+                                        <span class="item-label">模式</span>
+                                        <span class="item-value" id="pacingMode">--</span>
+                                        <span class="item-sub"><span id="lowerRate">--</span>/<span id="upperRate">--</span> bpm</span>
+                                    </span>
                                 </div>
                             </div>
 
-                            <!-- Mode Card -->
-                            <div class="card">
-                                <h3><span class="icon">⚙️</span> 起搏模式</h3>
-                                <div class="card-body">
-                                    <div class="metric-medium" id="pacingMode">--</div>
-                                    <div class="metric-detail-grid">
-                                        <div class="metric-item">
-                                            <span class="label">低限频率</span>
-                                            <b id="lowerRate">--</b> <small>bpm</small>
-                                        </div>
-                                        <div class="metric-item">
-                                            <span class="label">上限跟踪</span>
-                                            <b id="upperRate">--</b> <small>bpm</small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Events Card -->
-                            <div class="card alert-card">
+                            <!-- Events Card (full width) -->
+                            <div class="card alert-card full-width">
                                 <h3><span class="icon">⚠️</span> 关键事件</h3>
-                                <div class="card-body">
-                                    <div class="event-row">
-                                        <span>模式转换 (AMS)</span>
-                                        <b id="amsSwitch">--</b>
-                                    </div>
-                                    <div class="event-row">
-                                        <span>AT/AF 负荷</span>
-                                        <b id="atafLoad">--</b>
-                                    </div>
-                                    <div class="event-row">
-                                        <span>快心室率事件</span>
-                                        <b id="vtEvents">--</b>
-                                    </div>
-                                    <div class="event-row">
-                                        <span>其他事件</span>
-                                        <b id="otherEvents">--</b>
-                                    </div>
+                                <div class="event-content">
+                                    <span class="event-item">AMS: <b id="amsSwitch">--</b></span>
+                                    <span class="event-item">AT/AF: <b id="atafLoad">--</b></span>
+                                    <span class="event-item">VT: <b id="vtEvents">--</b></span>
+                                    <span class="event-item">其他: <b id="otherEvents">--</b></span>
                                 </div>
                             </div>
 
@@ -169,17 +145,7 @@
                         </div>
                     </section>
 
-                    <!-- Tab: Trends -->
-                    <section id="trends" class="tab-pane">
-                        <div class="chart-container">
-                            <h3>Pacing Threshold Trend</h3>
-                            <canvas id="thresholdChart"></canvas>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Impedance Trend</h3>
-                            <canvas id="impedanceChart"></canvas>
-                        </div>
-                    </section>
+
 
                     <!-- Tab: Records -->
                     <section id="records" class="tab-pane">
@@ -193,7 +159,7 @@
     </div>
     <script src="data/data_bundle.js"></script>
     <script src="assets/js/app.js"></script>
-    <script src="assets/js/charts.js"></script>
+
 </body>
 
 </html>

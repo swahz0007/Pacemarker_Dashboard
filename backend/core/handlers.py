@@ -3,13 +3,17 @@ Excel 文件处理器模块
 支持 .xls 和 .xlsx 格式
 """
 
+import logging
 import xlrd
 import openpyxl
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class XlsHandler:
     """处理旧版 .xls 格式文件"""
-    
+
     def __init__(self, filepath):
         self.book = xlrd.open_workbook(filepath, formatting_info=True)
         self.sheet = self.book.sheet_by_index(0)
@@ -22,13 +26,19 @@ class XlsHandler:
     def is_blue_cell(self, r, c):
         if r >= self.nrows or c >= self.ncols:
             return False
-        xf_idx = self.sheet.cell_xf_index(r, c)
-        return self.book.xf_list[xf_idx].background.pattern_colour_index == 31
+        try:
+            xf_idx = self.sheet.cell_xf_index(r, c)
+            return self.book.xf_list[xf_idx].background.pattern_colour_index == 31
+        except IndexError:
+            return False
+        except Exception as e:
+            logger.warning(f"检查蓝色单元格失败 ({r},{c}): {e}")
+            return False
 
 
 class XlsxHandler:
     """处理新版 .xlsx 格式文件"""
-    
+
     def __init__(self, filepath):
         self.wb = openpyxl.load_workbook(filepath, data_only=True)
         self.sheet = self.wb.active
@@ -38,14 +48,23 @@ class XlsxHandler:
     def get_cell_value(self, r, c):
         try:
             return self.sheet.cell(row=r + 1, column=c + 1).value
-        except:
+        except IndexError:
+            return ""
+        except Exception as e:
+            logger.warning(f"获取单元格值失败 ({r},{c}): {e}")
             return ""
 
     def is_blue_cell(self, r, c):
         try:
             cell = self.sheet.cell(row=r + 1, column=c + 1)
             return cell.fill.fgColor.type == "theme" and cell.fill.fgColor.theme == 4
-        except:
+        except AttributeError:
+            # 单元格没有 fill 属性
+            return False
+        except IndexError:
+            return False
+        except Exception as e:
+            logger.warning(f"检查蓝色单元格失败 ({r},{c}): {e}")
             return False
 
 

@@ -3,58 +3,13 @@
 负责按登记号对患者记录进行分组、排序和拆分输出
 """
 
-import re
 import json
 from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
 
 from config import PATIENT_RECORDS_DIR
-
-
-def parse_date(date_str: str):
-    """解析多种日期格式"""
-    if not date_str or not date_str.strip():
-        return None
-    
-    date_str = date_str.strip()
-    
-    patterns = [
-        r"(\d{4})年(\d{1,2})月(\d{1,2})日",
-        r"(\d{4})/(\d{1,2})/(\d{1,2})",
-        r"(\d{4})\.(\d{1,2})\.(\d{1,2})",
-        r"(\d{4})-(\d{1,2})-(\d{1,2})",
-    ]
-    
-    for pattern in patterns:
-        match = re.match(pattern, date_str)
-        if match:
-            try:
-                year, month, day = match.groups()
-                return datetime(int(year), int(month), int(day))
-            except ValueError:
-                continue
-    
-    return None
-
-
-def extract_name_from_filename(filename: str) -> str:
-    """从文件名中提取患者姓名"""
-    name = filename.replace(".xlsx", "").replace(".xls", "")
-    
-    suffixes = [
-        "起搏器报告单", "CRT-P报告单", "CRT-D报告单", "ICD报告单",
-        "（美敦力）", "（雅培）", "（百多力）", "(美敦力)", "(雅培)", "(百多力)",
-        "Vitatron", " ", "(", "（", ")", "）", "-", "_"
-    ]
-    
-    for suffix in suffixes:
-        name = name.split(suffix)[0]
-    
-    name = re.sub(r'\s*\(\d+\)\s*$', '', name)
-    name = re.sub(r'\s*（\d+）\s*$', '', name)
-    
-    return name.strip()
+from core.utils import extract_name_from_filename, parse_date
 
 
 def is_valid_record(record: dict) -> bool:

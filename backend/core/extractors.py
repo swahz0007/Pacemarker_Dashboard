@@ -3,10 +3,8 @@
 核心数据抽取逻辑
 """
 
-import re
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
@@ -16,7 +14,10 @@ from config import (
     Z3_COL_HEADERS, Z3_ROW_HEADERS
 )
 from core.handlers import get_handler
-from core.utils import clean_value, clean_label, is_ignored
+from core.utils import (
+    clean_value, clean_label, is_ignored,
+    extract_name_from_filename, excel_date_to_str
+)
 
 
 def get_anchors(handler):
@@ -132,19 +133,10 @@ def extract_table_in_range(handler, start_row, end_row, col_headers, row_headers
 
 def extract_footer_info(handler, conc_row):
     """提取页脚信息"""
+    import re
     full_lines = []
     date_str = ""
     date_pattern = re.compile(r"\d{4}\s*[-./年]\s*\d{1,2}\s*[-./月]\s*\d{1,2}\s*[日]?")
-
-    def excel_date_to_str(val):
-        """将Excel日期序列号转换为日期字符串"""
-        if isinstance(val, float) and 40000 < val < 55000:  # Excel日期范围约2009-2050
-            try:
-                dt = datetime(1899, 12, 30) + timedelta(days=val)
-                return dt.strftime('%Y年%m月%d日')
-            except:
-                pass
-        return None
 
     def has_data_in_rows(start_row, end_row):
         for r in range(start_row, end_row):
@@ -211,26 +203,6 @@ def extract_events_flexible(handler, start_row, end_row):
                     if not is_ignored(key) and len(key) > 0:
                         data[key] = find_value_smart(handler, r, c1)
     return data
-
-
-def extract_name_from_filename(filename: str) -> str:
-    """从文件名中提取患者姓名"""
-    import re as regex
-    name = filename.replace(".xlsx", "").replace(".xls", "")
-    
-    suffixes = [
-        "起搏器报告单", "CRT-P报告单", "CRT-D报告单", "ICD报告单",
-        "（美敦力）", "（雅培）", "（百多力）", "(美敦力)", "(雅培)", "(百多力)",
-        "Vitatron", " ", "(", "（", ")", "）", "-", "_"
-    ]
-    
-    for suffix in suffixes:
-        name = name.split(suffix)[0]
-    
-    name = regex.sub(r'\s*\(\d+\)\s*$', '', name)
-    name = regex.sub(r'\s*（\d+）\s*$', '', name)
-    
-    return name.strip()
 
 
 def validate_and_fix_header(d_header: dict, filename: str) -> dict:
