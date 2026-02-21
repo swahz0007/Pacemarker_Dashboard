@@ -3,7 +3,7 @@
  * 优化版本：添加防抖、文档片段、DOM缓存
  */
 
-(function() {
+(function () {
     'use strict';
 
     // --- State ---
@@ -27,13 +27,16 @@
         pacingMode: null, lowerRate: null, upperRate: null,
         visitConclusion: null, nextVisitDate: null,
         amsSwitch: null, atafLoad: null, vtEvents: null, otherEvents: null,
-        leadTableBody: null, recordTimeline: null
+        leadTableBody: null, recordTimeline: null,
+        trendsChartCanvas: null
     };
+
+    let chartInstance = null;
 
     // --- Utility Functions ---
 
     function debounce(func, wait) {
-        return function(...args) {
+        return function (...args) {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => func.apply(this, args), wait);
         };
@@ -162,9 +165,29 @@
                 displayVal = formatDate(v);
             } else if (typeof v === 'object') {
                 displayVal = `<pre style="margin:0; font-size:0.75rem">${JSON.stringify(v, null, 2)}</pre>`;
+            } else {
+                // Extract unit from the key (e.g. "电池电压（V）" -> "V")
+                const unitMatch = k.match(/（(.*?)）|\((.*?)\)/);
+                let unit = '';
+
+                if (unitMatch) {
+                    unit = unitMatch[1] || unitMatch[2];
+                } else {
+                    // Fallback for missing units based on keyword matching
+                    if (k.includes('电压') || k.includes('阈值')) unit = 'V';
+                    else if (k.includes('脉宽')) unit = 'ms';
+                    else if (k.includes('阻抗')) unit = 'Ω';
+                    else if (k.includes('感知') && !k.includes('极性')) unit = 'mV';
+                    else if (k.includes('比例') || k.includes('负荷')) unit = '%';
+                    else if (k.includes('频率')) unit = '次/分';
+                }
+
+                if (unit && !isNaN(parseFloat(v)) && v !== 'OFF' && v !== 'ON' && v !== '依赖') {
+                    displayVal = `${v} <span style="font-size:0.8em; color:var(--text-muted)">${unit}</span>`;
+                }
             }
 
-            const label = k.replace(/（.*?）/g, '').replace(/_/g, ' ').replace('电池预估寿命', '预估寿命');
+            const label = k.replace(/（.*?）|\(.*?\)/g, '').replace(/_/g, ' ').replace('电池预估寿命', '预估寿命');
             return `<div class="kv-row ${extraClass}"><span class="kv-key">${label}</span><span class="kv-val">${displayVal}</span></div>`;
         }).join('');
     }
@@ -200,6 +223,7 @@
         dom.otherEvents = document.getElementById('otherEvents');
         dom.leadTableBody = document.getElementById('leadTableBody');
         dom.recordTimeline = document.getElementById('recordTimeline');
+        dom.trendsChartCanvas = document.getElementById('trendsChart');
     }
 
     // --- Data Loading ---
@@ -382,16 +406,16 @@
                         <div class="report-section section-events">
                             <h4 class="section-title">⚠️ 事件与结论</h4>
                             <div class="kv-grid">${(() => {
-                                const s = {}, l = {};
-                                Object.entries(rec.events_raw).forEach(([k, v]) => {
-                                    if (k.includes('结论') || k.includes('建议') || k.includes('说明') || (typeof v === 'string' && v.length > 20)) {
-                                        l[k] = v;
-                                    } else {
-                                        s[k] = v;
-                                    }
-                                });
-                                return renderKeyValue(s) + renderKeyValue(l, 'full-row');
-                            })()}</div>
+                    const s = {}, l = {};
+                    Object.entries(rec.events_raw).forEach(([k, v]) => {
+                        if (k.includes('结论') || k.includes('建议') || k.includes('说明') || (typeof v === 'string' && v.length > 20)) {
+                            l[k] = v;
+                        } else {
+                            s[k] = v;
+                        }
+                    });
+                    return renderKeyValue(s) + renderKeyValue(l, 'full-row');
+                })()}</div>
                         </div>
                     </div>
                 </div>
@@ -399,6 +423,108 @@
             timelineFragment.appendChild(div);
         });
         dom.recordTimeline.appendChild(timelineFragment);
+
+        // Render Trends Chart
+        renderTrendsChart(patient);
+    }
+
+    function renderTrendsChart(patient) {
+        if (!dom.trendsChartCanvas) return;
+        const ctx = dom.trendsChartCanvas.getContext('2d');
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        // We need chronology: oldest to newest for charts
+        const chronologicalHistory = [...patient.history].reverse();
+
+        const labels = [];
+        const rvImpData = [];
+        const rvThrData = [];
+        const batVolData = [];
+
+        chronologicalHistory.forEach(rec => {
+            labels.push(rec.dateStr);
+            rvImpData.push(parseFloat(rec.rv_impedance) || null);
+            rvThrData.push(parseFloat(rec.rv_threshold) || null);
+            batVolData.push(rec.battery.voltage || null);
+        });
+
+        // Determine Text Color based on theme
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const isSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = currentTheme === 'dark' || (!currentTheme && isSystemDark);
+        const textColor = isDark ? '#CBD5E1' : '#718096';
+        const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '右室阻抗 (Ω)',
+                        data: rvImpData,
+                        borderColor: '#3B82F6', // Blue
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        yAxisID: 'y',
+                        tension: 0.3,
+                        spanGaps: true
+                    },
+                    {
+                        label: '右室阈值 (V)',
+                        data: rvThrData,
+                        borderColor: '#10B981', // Green
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        yAxisID: 'y1',
+                        tension: 0.3,
+                        spanGaps: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: textColor }
+                    },
+                    tooltip: {
+                        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                        titleColor: isDark ? '#F8FAFC' : '#1E293B',
+                        bodyColor: isDark ? '#CBD5E1' : '#64748B',
+                        borderColor: isDark ? '#334155' : '#E2E8F0',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: { display: true, text: '阻抗 (Ω)', color: textColor },
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: { display: true, text: '阈值 (V)', color: textColor },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: textColor }
+                    }
+                }
+            }
+        });
     }
 
     // --- Event Handlers ---
@@ -420,7 +546,7 @@
     }, 300);
 
     // --- Global Functions ---
-    window.toggleHistory = function(id) {
+    window.toggleHistory = function (id) {
         const el = document.getElementById(id);
         const card = el.parentElement;
         if (el.classList.contains('hidden')) {
@@ -446,6 +572,30 @@
         dom.search.addEventListener('input', (e) => {
             handleSearch(e.target.value);
         });
+
+        // Theme Toggle Logic
+        const themeBtn = document.getElementById('themeToggleBtn');
+        if (themeBtn) {
+            const savedTheme = localStorage.getItem('pm_theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+
+            themeBtn.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const isSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDark = currentTheme === 'dark' || (!currentTheme && isSystemDark);
+                const newTheme = isDark ? 'light' : 'dark';
+
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('pm_theme', newTheme);
+
+                // Re-render chart to update colors based on new theme
+                if (currentPatient) {
+                    renderTrendsChart(currentPatient);
+                }
+            });
+        }
     });
 
 })();

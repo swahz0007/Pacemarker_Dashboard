@@ -1,37 +1,122 @@
-/* CSS Variables - 简洁淡雅风格 */
+/* CSS Variables - 现代医疗极客风 */
 :root {
-    /* Color Palette - 更柔和的色调 */
-    --bg-main: #FAFAFA;
-    --bg-sidebar: #F5F5F3;
-    --bg-card: #FFFFFF;
+    /* 默认浅色模式 (Light Mode) */
+    --bg-main: #F4F7F9;
+    /* 轻微偏蓝的冷灰色，比原先的 FAFAFA 更有呼吸感 */
+    --bg-sidebar: #FFFFFF;
+    /* 侧边栏纯白，拉开层级 */
+    --bg-card: rgba(255, 255, 255, 0.85);
+    /* 半透明卡片底色，为毛玻璃做准备 */
 
-    --text-primary: #2D3748;
-    --text-secondary: #718096;
-    --text-muted: #A0AEC0;
+    --text-primary: #1E293B;
+    /* 更深邃冷峻的石板黑 */
+    --text-secondary: #64748B;
+    /* 现代灰蓝 */
+    --text-muted: #94A3B8;
 
-    --primary: #4A90D9;
-    --primary-light: #EBF4FC;
-    --success: #48BB78;
-    --success-light: #F0FFF4;
-    --danger: #E53E3E;
-    --danger-light: #FFF5F5;
-    --warning: #ECC94B;
-    --warning-light: #FFFFF0;
+    --primary: #3B82F6;
+    /* 明亮、科技感的蓝色 */
+    --primary-light: #EFF6FF;
+    --success: #10B981;
+    /* 清晰的医疗绿 */
+    --success-light: #F0FDF4;
+    --danger: #EF4444;
+    /* 警示红 */
+    --danger-light: #FEF2F2;
+    --warning: #F59E0B;
+    --warning-light: #FFFBEB;
 
-    --border-subtle: #E8E8E6;
-    --border-light: #F0F0EE;
+    --border-subtle: #E2E8F0;
+    /* 更干净的边框色 */
+    --border-light: #F1F5F9;
 
-    /* 更柔和的阴影 */
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.06);
+    /* 现代多层柔和阴影 (Smooth Layered Shadows) */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.02);
+    --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.2);
+    /* 发光效果 */
 
-    --font-main: 'LXGW WenKai Screen', 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'CaskaydiaCove Nerd Font', 'JetBrains Mono', monospace;
+    --font-main: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'CaskaydiaCove Nerd Font', monospace;
 
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    --radius-sm: 6px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+}
+
+/* 暗色模式 (Dark Mode) - 支持手动切换与系统偏好 */
+:root[data-theme="dark"] {
+    --bg-main: #0F172A;
+    --bg-sidebar: #1E293B;
+    --bg-card: rgba(30, 41, 59, 0.7);
+
+    --text-primary: #F8FAFC;
+    --text-secondary: #CBD5E1;
+    --text-muted: #64748B;
+
+    --primary: #60A5FA;
+    --primary-light: rgba(59, 130, 246, 0.15);
+    --success: #34D399;
+    --success-light: rgba(16, 185, 129, 0.15);
+    --danger: #F87171;
+    --danger-light: rgba(239, 68, 68, 0.15);
+    --warning: #FBBF24;
+    --warning-light: rgba(245, 158, 11, 0.15);
+
+    --border-subtle: #334155;
+    --border-light: #1E293B;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    --shadow-glow: 0 0 20px rgba(96, 165, 250, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-main: #0F172A;
+        --bg-sidebar: #1E293B;
+        --bg-card: rgba(30, 41, 59, 0.7);
+        --text-primary: #F8FAFC;
+        --text-secondary: #CBD5E1;
+        --text-muted: #64748B;
+        --primary: #60A5FA;
+        --primary-light: rgba(59, 130, 246, 0.15);
+        --success: #34D399;
+        --success-light: rgba(16, 185, 129, 0.15);
+        --danger: #F87171;
+        --danger-light: rgba(239, 68, 68, 0.15);
+        --warning: #FBBF24;
+        --warning-light: rgba(245, 158, 11, 0.15);
+        --border-subtle: #334155;
+        --border-light: #1E293B;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+        --shadow-glow: 0 0 20px rgba(96, 165, 250, 0.15);
+    }
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.theme-toggle-btn:hover {
+    background: var(--bg-main);
+    color: var(--text-primary);
 }
 
 * {
@@ -132,20 +217,24 @@ body {
 }
 
 .patient-item:hover {
-    background-color: #EFEFED;
-    /* Notion Hover */
+    background-color: var(--border-light);
+    transform: translateX(4px);
+    /* 悬浮微动效 */
 }
 
 .patient-item.active {
-    background: #EFEFED;
+    background: var(--bg-main);
+    /* 选中项融入主背景 */
     border-left: 3px solid var(--primary);
+    box-shadow: var(--shadow-sm);
 }
 
 .patient-avatar {
     width: 32px;
     height: 32px;
-    border-radius: 4px;
-    background-color: #E3E2E0;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--primary-light), var(--bg-sidebar));
+    border: 1px solid var(--border-subtle);
     /* Notion generic icon bg */
     display: flex;
     align-items: center;
@@ -228,9 +317,8 @@ body {
     align-items: flex-end;
     padding-bottom: 20px;
     border-bottom: 1px solid var(--border-light);
-}
-    align-items: flex-end;
-    animation: fadeInDown 0.5s ease;
+    animation: fadeInDown 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* 更丝滑的弹性动画 */
 }
 
 .patient-info h1 {
@@ -238,23 +326,24 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 8px;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.5px;
+    /* 收紧字距 */
 }
 
 .badge {
-    padding: 4px 10px;
+    padding: 6px 12px;
+    /* 增加点击区域感 */
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
     font-family: var(--font-mono);
     display: inline-flex;
     align-items: center;
+    border: 1px solid var(--border-subtle);
 }
 
 .id-badge {
-    background-color: #F7F8FA;
-    color: var(--text-secondary);
-    /* Notion Gray */
+    background-color: var(--bg-sidebar);
     color: var(--text-secondary);
 }
 
@@ -346,23 +435,43 @@ body {
     -webkit-column-break-inside: avoid;
 }
 
-/* Card Style - 简洁淡雅风格 */
+/* Card Style - 现代毛玻璃质感 */
 .card {
     background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    /* 毛玻璃核心属性 */
+    -webkit-backdrop-filter: blur(12px);
     border-radius: var(--radius-md);
-    padding: 16px 20px;
-    padding-left: 24px;
-    border: 1px solid var(--border-light);
-    box-shadow: var(--shadow-sm);
-    transition: all 0.25s ease;
-    animation: fadeInUp 0.4s ease backwards;
+    padding: 20px 24px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* 高光边框 */
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
     position: relative;
+    overflow: hidden;
+    /* 防止内部元素溢出圆角 */
+}
+
+/* 针对暗色模式的边框调整 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .card {
+        border: 1px solid var(--border-subtle);
+        box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), var(--shadow-md);
+    }
+}
+
+:root[data-theme="dark"] .card {
+    border: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), var(--shadow-md);
 }
 
 .card:hover {
-    border-color: var(--border-subtle);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+    border-color: rgba(59, 130, 246, 0.3);
+    /* 悬浮时边框略微发蓝光 */
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+    transform: translateY(-3px) scale(1.01);
+    /* 微微放大带来呼吸感 */
 }
 
 .card h3 {
@@ -407,7 +516,7 @@ body {
 
 .metric-sub {
     color: var(--success);
-    font-weight: 500;
+    font-weight: 600;
     margin-top: 10px;
     font-size: 0.85rem;
     display: inline-flex;
@@ -416,6 +525,8 @@ body {
     padding: 4px 10px;
     background: var(--success-light);
     border-radius: var(--radius-sm);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    /* 增加边缘清晰度 */
 }
 
 .metric-detail-grid {
@@ -428,10 +539,11 @@ body {
 .metric-item {
     display: flex;
     flex-direction: column;
-    background: #F8FAFC;
+    background: var(--bg-sidebar);
+    /* 同步背景色变量 */
     padding: 12px 14px;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--border-subtle);
 }
 
 .metric-item .label {
@@ -475,15 +587,14 @@ body {
     border-radius: 3px;
     transition: width 0.5s ease;
 }
-    color: var(--text-secondary);
-    margin-bottom: 4px;
+
+color: var(--text-secondary);
+margin-bottom: 4px;
 }
 
 .highlight-card {
     position: relative;
-    overflow: hidden;
-    background: linear-gradient(135deg, #FFFFFF 0%, #FAFCFF 100%);
-    border-color: #D6E4F0;
+    border-color: var(--border-subtle);
 }
 
 .highlight-card::before {
@@ -493,7 +604,8 @@ body {
     left: 0;
     width: 4px;
     height: 100%;
-    background: linear-gradient(180deg, var(--primary) 0%, #7AB3ED 100%);
+    background: var(--primary);
+    /* 简化为纯色侧边条，更干净 */
     border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
@@ -502,8 +614,7 @@ body {
 }
 
 .alert-card {
-    border-color: #FBD5D5;
-    background: linear-gradient(135deg, #FFFFFF 0%, #FFF9F9 100%);
+    border-color: var(--danger-light);
 }
 
 .alert-card::before {
@@ -577,9 +688,12 @@ body {
 .event-item {
     font-size: 0.85rem;
     color: var(--text-secondary);
-    background: #F7F8FA;
+    background: var(--bg-sidebar);
+    /* 使用变量而不是写死的 #F7F8FA */
     padding: 6px 12px;
     border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+    /* 增加极细的边框提升精致感 */
     white-space: nowrap;
 }
 
@@ -633,20 +747,22 @@ body {
 .medical-table th {
     text-align: left;
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border-subtle);
     font-weight: 600;
-    background: #FAFAFA;
+    background: var(--bg-sidebar);
+    /* 适配暗色模式底色 */
 }
 
 .medical-table td {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border-light);
     font-family: var(--font-mono);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    /* 稍微放大一点数据 */
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
 }
@@ -656,7 +772,8 @@ body {
 }
 
 .medical-table tr:hover td {
-    background-color: #FAFBFC;
+    background-color: var(--bg-main);
+    /* 悬浮颜色适配变量 */
 }
 
 /* Charts */
@@ -734,8 +851,7 @@ body {
 
 /* Summary Card */
 .summary-card {
-    background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
-    border-color: #E2E8F0;
+    border-color: var(--border-subtle);
 }
 
 .summary-card::before {
@@ -818,14 +934,14 @@ body {
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
-    background: white;
+    background: var(--bg-card);
+    /* 适配变量 */
     transition: background 0.2s;
     border-bottom: 1px solid transparent;
 }
 
 .history-header:hover {
-    background: #F7F7F5;
-    /* Notion hover */
+    background: var(--bg-sidebar);
 }
 
 .history-card.expanded {
@@ -835,7 +951,8 @@ body {
 }
 
 .history-card.expanded .history-header {
-    background: white;
+    background: var(--bg-card);
+    /* 适配变量，移除纯白 */
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -847,8 +964,8 @@ body {
 }
 
 .mode-badge {
-    background: rgba(35, 131, 226, 0.1);
-    /* Notion Blue Tint */
+    background: var(--primary-light);
+    /* 使用变量而不是写死的透明度计算 */
     color: var(--primary);
     padding: 4px 8px;
     border-radius: 4px;
@@ -866,7 +983,8 @@ body {
 
 /* Unified Report Sheet */
 .report-sheet {
-    background: #F8FAFC;
+    background: var(--bg-sidebar);
+    /* 适配变量，移除 #F8FAFC */
     padding: 32px;
     display: grid;
     gap: 32px;

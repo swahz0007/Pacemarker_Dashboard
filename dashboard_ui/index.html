@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://npm.elemecdn.com/lxgw-wenkai-screen-webfont@1.1.0/style.css" media="print"
         onload="this.media='all'">
     <!-- Chart.js -->
-
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -20,7 +20,7 @@
         <!-- Sidebar: Patient List -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>起搏器程控报告查询系统</h2>
+                <h2>程控报告查询系统</h2>
                 <div class="search-box">
                     <input type="text" id="patientSearch" placeholder="搜索姓名或登记号...">
                 </div>
@@ -31,6 +31,9 @@
             </div>
             <div class="sidebar-footer">
                 共 <span id="patientCount">0</span> 份档案
+                <button id="themeToggleBtn" class="theme-toggle-btn">
+                    <span class="icon">🌓</span> 切换主题
+                </button>
             </div>
         </aside>
 
@@ -108,7 +111,8 @@
                                     <span class="compact-item">
                                         <span class="item-label">模式</span>
                                         <span class="item-value" id="pacingMode">--</span>
-                                        <span class="item-sub"><span id="lowerRate">--</span>/<span id="upperRate">--</span> bpm</span>
+                                        <span class="item-sub"><span id="lowerRate">--</span>/<span
+                                                id="upperRate">--</span> bpm</span>
                                     </span>
                                 </div>
                             </div>
@@ -141,6 +145,14 @@
                                         <!-- Populated by JS -->
                                     </tbody>
                                 </table>
+                            </div>
+
+                            <!-- Trends Chart Container -->
+                            <div class="card full-width">
+                                <h3><span class="icon">📈</span> 关键参数趋势图</h3>
+                                <div class="chart-container" style="position: relative; height:250px; width:100%">
+                                    <canvas id="trendsChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </section>
