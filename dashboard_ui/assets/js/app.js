@@ -546,7 +546,418 @@
         }));
     }
 
-    // --- UI Rendering ---
+    // --- Deep Clinical Statistics ---
+
+    let deepCharts = [];
+
+    function aggregateDeepStats() {
+        const records = window.PACEMAKER_DATA.records;
+        if (!records) return null;
+
+        const modeMap = {};
+        const voltages = [];       // { name, id, voltage, file_name }
+        const monthMap = {};       // 'YYYY-MM' -> count
+        const afBuckets = { '无记录': 0, '0%': 0, '<1%': 0, '1-10%': 0, '10-50%': 0, '>50%': 0 };
+        const batteryAlerts = [];  // patients with low voltage
+
+        Object.entries(records).forEach(([filename, patient]) => {
+            const recs = patient['程控记录'] || [];
+            if (recs.length === 0) return;
+
+            // Use latest record for mode/battery/AF
+            const latest = recs[recs.length - 1];
+            const name = patient['姓名'] || '未知';
+            const pid = patient['登记号'] || '';
+
+            // Pacing Mode
+            const mode = latest.basic_params?.settings?.['模式'];
+            if (mode && mode !== '/' && mode !== '--') {
+                const modeClean = mode.trim().toUpperCase();
+                modeMap[modeClean] = (modeMap[modeClean] || 0) + 1;
+            }
+
+            // Battery Voltage
+            const batt = latest.test_params?.battery_and_leads;
+            const vStr = batt?.['电池电压（V）'] || batt?.['电池电压(V)'] || batt?.['电池电压'];
+            if (vStr) {
+                const v = parseFloat(vStr);
+                if (!isNaN(v) && v > 0 && v < 5) {
+                    voltages.push({ name, id: pid, voltage: v, file_name: filename });
+                    if (v < 2.6) {
+                        const status = batt['电池状态'] || '';
+                        const life = batt['预估寿命'] || '';
+                        batteryAlerts.push({ name, id: pid, voltage: v, status, life, file_name: filename });
+                    }
+                }
+            }
+
+            // AT/AF Burden
+            const ev = latest.events_and_footer || {};
+            const afRaw = ev['AT/AF负荷%'] || ev['AT/AF负荷'] || ev['AT/AF事件次数'];
+            if (afRaw !== undefined && afRaw !== null && afRaw !== '' && afRaw !== '/') {
+                const afVal = parseFloat(afRaw);
+                if (!isNaN(afVal)) {
+                    if (afVal === 0) afBuckets['0%']++;
+                    else if (afVal < 1) afBuckets['<1%']++;
+                    else if (afVal < 10) afBuckets['1-10%']++;
+                    else if (afVal < 50) afBuckets['10-50%']++;
+                    else afBuckets['>50%']++;
+                } else {
+                    afBuckets['无记录']++;
+                }
+            } else {
+                afBuckets['无记录']++;
+            }
+
+            // Monthly visit dates (all records)
+            recs.forEach(r => {
+                const rawDate = r.footer_meta?.['程控日期'] || r.meta?.['程控日期'];
+                if (rawDate) {
+                    const ts = parseToTimestamp(rawDate);
+                    if (ts > 0) {
+                        const d = new Date(ts);
+                        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                        monthMap[key] = (monthMap[key] || 0) + 1;
+                    }
+                }
+            });
+        });
+
+        // Sort modes by count
+        const modeSorted = Object.entries(modeMap).sort((a, b) => b[1] - a[1]);
+
+        // Voltage distribution buckets
+        const voltBuckets = { '<2.4V': 0, '2.4-2.6V': 0, '2.6-2.8V': 0, '2.8-3.0V': 0, '3.0-3.2V': 0, '>3.2V': 0 };
+        voltages.forEach(v => {
+            if (v.voltage < 2.4) voltBuckets['<2.4V']++;
+            else if (v.voltage < 2.6) voltBuckets['2.4-2.6V']++;
+            else if (v.voltage < 2.8) voltBuckets['2.6-2.8V']++;
+            else if (v.voltage < 3.0) voltBuckets['2.8-3.0V']++;
+            else if (v.voltage < 3.2) voltBuckets['3.0-3.2V']++;
+            else voltBuckets['>3.2V']++;
+        });
+
+        // Sort monthly timeline
+        const months = Object.keys(monthMap).sort();
+
+        // Sort alerts by voltage ascending (most critical first)
+        batteryAlerts.sort((a, b) => a.voltage - b.voltage);
+
+        return {
+            modeLabels: modeSorted.map(e => e[0]),
+            modeValues: modeSorted.map(e => e[1]),
+            voltLabels: Object.keys(voltBuckets),
+            voltValues: Object.values(voltBuckets),
+            monthLabels: months,
+            monthValues: months.map(m => monthMap[m]),
+            afLabels: Object.keys(afBuckets),
+            afValues: Object.values(afBuckets),
+            batteryAlerts
+        };
+    }
+
+    function renderDeepCharts() {
+        const ds = aggregateDeepStats();
+        if (!ds) return;
+
+        const tc = getThemeColors();
+
+        // Destroy old deep charts
+        deepCharts.forEach(c => c.destroy());
+        deepCharts = [];
+
+        const commonTooltip = {
+            backgroundColor: tc.tooltipBg,
+            titleColor: tc.tooltipTitle,
+            bodyColor: tc.tooltipBody,
+            borderColor: tc.tooltipBorder,
+            borderWidth: 1, padding: 12, cornerRadius: 8
+        };
+
+        // 1. Pacing Mode - Doughnut
+        const modeColors = [
+            '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
+            '#EC4899', '#06B6D4', '#F97316', '#14B8A6', '#6366F1',
+            '#84CC16', '#E11D48', '#0EA5E9', '#A855F7', '#22D3EE'
+        ];
+        deepCharts.push(new Chart(document.getElementById('chartPacingMode'), {
+            type: 'doughnut',
+            data: {
+                labels: ds.modeLabels,
+                datasets: [{
+                    data: ds.modeValues,
+                    backgroundColor: modeColors.slice(0, ds.modeLabels.length),
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: 12, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } },
+                    tooltip: commonTooltip
+                }
+            }
+        }));
+
+        // 2. Battery Voltage Distribution - Bar with color coding
+        const voltColors = ['#EF4444', '#F59E0B', '#F97316', '#10B981', '#3B82F6', '#8B5CF6'];
+        deepCharts.push(new Chart(document.getElementById('chartBatteryVolt'), {
+            type: 'bar',
+            data: {
+                labels: ds.voltLabels,
+                datasets: [{
+                    label: '患者数',
+                    data: ds.voltValues,
+                    backgroundColor: voltColors.map(c => c + '99'),
+                    borderColor: voltColors,
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: commonTooltip },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: 11 } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 3. Monthly Trend - Area
+        deepCharts.push(new Chart(document.getElementById('chartMonthlyTrend'), {
+            type: 'line',
+            data: {
+                labels: ds.monthLabels,
+                datasets: [{
+                    label: '程控次数',
+                    data: ds.monthValues,
+                    borderColor: '#10B981',
+                    backgroundColor: tc.isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#10B981',
+                    pointRadius: 3,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: commonTooltip },
+                scales: {
+                    x: { grid: { color: tc.grid }, ticks: { color: tc.text, maxRotation: 45, font: { size: 10 } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 4. AT/AF Burden - Polar/Bar
+        const afColors = ['#94A3B8', '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#DC2626'];
+        deepCharts.push(new Chart(document.getElementById('chartAfBurden'), {
+            type: 'bar',
+            data: {
+                labels: ds.afLabels,
+                datasets: [{
+                    label: '患者数',
+                    data: ds.afValues,
+                    backgroundColor: afColors.map(c => c + '99'),
+                    borderColor: afColors,
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: commonTooltip },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: tc.text } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 5. Battery Alert List
+        const listEl = document.getElementById('batteryAlertList');
+        if (ds.batteryAlerts.length === 0) {
+            listEl.innerHTML = '<div class="alert-empty">✅ 所有设备电池状态正常</div>';
+        } else {
+            let html = `<div class="alert-count">⚠️ 发现 <b>${ds.batteryAlerts.length}</b> 位患者电池电压偏低 (&lt;2.6V)</div>`;
+            html += '<div class="alert-table-scroll"><table class="alert-table"><thead><tr><th>姓名</th><th>登记号</th><th>电压</th><th>状态</th></tr></thead><tbody>';
+            ds.batteryAlerts.forEach(a => {
+                const vClass = a.voltage < 2.4 ? 'volt-critical' : 'volt-warning';
+                html += `<tr class="alert-row clickable" data-file="${a.file_name}">`;
+                html += `<td>${a.name}</td>`;
+                html += `<td class="mono">${a.id}</td>`;
+                html += `<td class="${vClass}">${a.voltage.toFixed(2)}V</td>`;
+                html += `<td>${a.status || a.life || '--'}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            listEl.innerHTML = html;
+
+            // Make alert rows clickable to jump to patient
+            listEl.querySelectorAll('.alert-row.clickable').forEach(row => {
+                row.addEventListener('click', () => {
+                    const fn = row.dataset.file;
+                    if (fn) loadPatientDetails(fn);
+                });
+            });
+        }
+    }
+
+    // --- Lead Parameters & Compliance Charts ---
+
+    let leadParamCharts = [];
+
+    function renderLeadCharts() {
+        const records = window.PACEMAKER_DATA.records;
+        if (!records) return;
+
+        const tc = getThemeColors();
+
+        // Collect impedance & threshold data
+        const impRA = [], impRV = [], impLV = [];
+        const thrRA = [], thrRV = [], thrLV = [];
+        let singleVisit = 0, multiVisit = 0;
+
+        Object.values(records).forEach(patient => {
+            const recs = patient['程控记录'] || [];
+            if (recs.length === 0) return;
+
+            // Compliance
+            if (recs.length === 1) singleVisit++;
+            else multiVisit++;
+
+            const latest = recs[recs.length - 1];
+            const thresh = latest.test_params?.threshold_tests || {};
+
+            // Impedance
+            const parseV = (s) => { const n = parseFloat(s); return (!isNaN(n) && n > 0) ? n : null; };
+            const ra_imp = parseV(thresh['心房_阻抗']);
+            const rv_imp = parseV(thresh['右心室_阻抗']);
+            const lv_imp = parseV(thresh['左心室_阻抗']);
+            if (ra_imp) impRA.push(ra_imp);
+            if (rv_imp) impRV.push(rv_imp);
+            if (lv_imp) impLV.push(lv_imp);
+
+            // Threshold
+            const ra_thr = parseV(thresh['心房_阈值']);
+            const rv_thr = parseV(thresh['右心室_阈值']);
+            const lv_thr = parseV(thresh['左心室_阈值']);
+            if (ra_thr) thrRA.push(ra_thr);
+            if (rv_thr) thrRV.push(rv_thr);
+            if (lv_thr) thrLV.push(lv_thr);
+        });
+
+        // Destroy old
+        leadParamCharts.forEach(c => c.destroy());
+        leadParamCharts = [];
+
+        const commonTooltip = {
+            backgroundColor: tc.tooltipBg,
+            titleColor: tc.tooltipTitle,
+            bodyColor: tc.tooltipBody,
+            borderColor: tc.tooltipBorder,
+            borderWidth: 1, padding: 12, cornerRadius: 8
+        };
+
+        // Helper: bucket an array into ranges
+        function bucketize(arr, ranges) {
+            const counts = ranges.map(() => 0);
+            arr.forEach(v => {
+                for (let i = 0; i < ranges.length; i++) {
+                    if (v >= ranges[i][0] && v < ranges[i][1]) { counts[i]++; break; }
+                }
+            });
+            return counts;
+        }
+
+        // 1. Impedance Distribution - Grouped Bar (RA/RV/LV)
+        const impRanges = [[0, 200], [200, 400], [400, 600], [600, 800], [800, 1000], [1000, 2000]];
+        const impLabels = ['<200', '200-400', '400-600', '600-800', '800-1000', '1000+'];
+        leadParamCharts.push(new Chart(document.getElementById('chartImpedance'), {
+            type: 'bar',
+            data: {
+                labels: impLabels.map(l => l + ' Ω'),
+                datasets: [
+                    { label: 'RA (心房)', data: bucketize(impRA, impRanges), backgroundColor: '#3B82F699', borderColor: '#3B82F6', borderWidth: 1, borderRadius: 4 },
+                    { label: 'RV (右室)', data: bucketize(impRV, impRanges), backgroundColor: '#10B98199', borderColor: '#10B981', borderWidth: 1, borderRadius: 4 },
+                    { label: 'LV (左室)', data: bucketize(impLV, impRanges), backgroundColor: '#F59E0B99', borderColor: '#F59E0B', borderWidth: 1, borderRadius: 4 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: 16 } },
+                    tooltip: commonTooltip
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: tc.text } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 2. Threshold Distribution - Grouped Bar
+        const thrRanges = [[0, 0.5], [0.5, 1.0], [1.0, 1.5], [1.5, 2.0], [2.0, 3.0], [3.0, 10]];
+        const thrLabels = ['<0.5', '0.5-1.0', '1.0-1.5', '1.5-2.0', '2.0-3.0', '3.0+'];
+        leadParamCharts.push(new Chart(document.getElementById('chartThreshold'), {
+            type: 'bar',
+            data: {
+                labels: thrLabels.map(l => l + ' V'),
+                datasets: [
+                    { label: 'RA', data: bucketize(thrRA, thrRanges), backgroundColor: '#3B82F699', borderColor: '#3B82F6', borderWidth: 1, borderRadius: 4 },
+                    { label: 'RV', data: bucketize(thrRV, thrRanges), backgroundColor: '#10B98199', borderColor: '#10B981', borderWidth: 1, borderRadius: 4 },
+                    { label: 'LV', data: bucketize(thrLV, thrRanges), backgroundColor: '#F59E0B99', borderColor: '#F59E0B', borderWidth: 1, borderRadius: 4 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: 12, font: { size: 11 } } },
+                    tooltip: commonTooltip
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: 10 } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 3. Follow-up Compliance Doughnut
+        leadParamCharts.push(new Chart(document.getElementById('chartCompliance'), {
+            type: 'doughnut',
+            data: {
+                labels: ['多次程控 (≥2次)', '仅单次程控'],
+                datasets: [{
+                    data: [multiVisit, singleVisit],
+                    backgroundColor: ['#10B981', '#F59E0B'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: 16, usePointStyle: true, pointStyleWidth: 8, font: { size: 12 } } },
+                    tooltip: {
+                        ...commonTooltip,
+                        callbacks: {
+                            label: function (ctx) {
+                                const total = multiVisit + singleVisit;
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                return `${ctx.label}: ${ctx.raw} 人 (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        }));
+    }
+
 
     function renderList(patients) {
         dom.list.innerHTML = '';
@@ -853,6 +1264,8 @@
         setTimeout(() => {
             loadIndex();
             renderDashboard();
+            renderDeepCharts();
+            renderLeadCharts();
         }, 50);
 
         // Tabs
@@ -892,9 +1305,184 @@
                     renderTrendsChart(currentPatient);
                 } else {
                     renderDashboard();
+                    renderDeepCharts();
+                    renderLeadCharts();
                 }
             });
         }
+
+
+        // --- Fullscreen / Digital Dashboard Mode ---
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        let isFullscreen = false;
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                isFullscreen = !isFullscreen;
+                document.body.classList.toggle('fullscreen-mode', isFullscreen);
+                fullscreenBtn.textContent = isFullscreen ? '✕ 退出大屏' : '🖥️ 大屏模式';
+
+                // Resize charts after layout change
+                setTimeout(() => {
+                    dashboardCharts.forEach(c => c.resize());
+                    deepCharts.forEach(c => c.resize());
+                    leadParamCharts.forEach(c => c.resize());
+                }, 350);
+            });
+        }
+
+        // --- Drill-down Modal ---
+        const ddModal = document.getElementById('drilldownModal');
+        const ddTitle = document.getElementById('drilldownTitle');
+        const ddContent = document.getElementById('drilldownContent');
+        const ddClose = document.getElementById('drilldownClose');
+
+        function openDrilldown(title, patients) {
+            ddTitle.textContent = title;
+            let html = `<div class="drilldown-summary">共 <b>${patients.length}</b> 位患者匹配此筛选条件</div>`;
+            html += '<table class="drilldown-table"><thead><tr>';
+            html += '<th>姓名</th><th>登记号</th><th>品牌</th><th>型号</th><th>植入日期</th><th>程控次数</th>';
+            html += '</tr></thead><tbody>';
+            patients.forEach(p => {
+                html += `<tr data-file="${p.file_name || ''}">`;
+                html += `<td>${p.name || p['姓名'] || '--'}</td>`;
+                html += `<td class="mono" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary)">${p.id || p['登记号'] || '--'}</td>`;
+                html += `<td>${p.brand || '--'}</td>`;
+                html += `<td>${p.model || '--'}</td>`;
+                html += `<td>${formatDate(p.implant_date) || '--'}</td>`;
+                html += `<td>${p.count || 1}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            ddContent.innerHTML = html;
+
+            // Make rows clickable
+            ddContent.querySelectorAll('tr[data-file]').forEach(row => {
+                row.addEventListener('click', () => {
+                    const fn = row.dataset.file;
+                    if (fn) {
+                        ddModal.classList.add('hidden');
+                        loadPatientDetails(fn);
+                    }
+                });
+            });
+
+            ddModal.classList.remove('hidden');
+        }
+
+        if (ddClose) {
+            ddClose.addEventListener('click', () => ddModal.classList.add('hidden'));
+        }
+        if (ddModal) {
+            ddModal.addEventListener('click', (e) => {
+                if (e.target === ddModal) ddModal.classList.add('hidden');
+            });
+        }
+
+        // --- Wire drill-down to charts ---
+        // Attach click handlers after charts are rendered
+        function attachDrilldownHandlers() {
+            // 1. Brand Distribution chart → filter by brand
+            const brandChart = dashboardCharts[0]; // first chart is brand doughnut
+            if (brandChart) {
+                brandChart.options.onClick = (evt, elements) => {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        const brandName = brandChart.data.labels[idx];
+                        const filtered = allPatients.filter(p => (p.brand || '未知') === brandName);
+                        openDrilldown(`品牌: ${brandName} (${filtered.length}人)`, filtered);
+                    }
+                };
+                brandChart.update();
+            }
+
+            // 2. Model Top 10 chart → filter by model
+            const modelChart = dashboardCharts[1];
+            if (modelChart) {
+                modelChart.options.onClick = (evt, elements) => {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        const modelName = modelChart.data.labels[idx];
+                        const filtered = allPatients.filter(p => (p.model || '未知') === modelName);
+                        openDrilldown(`型号: ${modelName} (${filtered.length}人)`, filtered);
+                    }
+                };
+                modelChart.update();
+            }
+
+            // 3. Pacing Mode chart → filter by mode
+            const modeChart = deepCharts[0];
+            if (modeChart) {
+                modeChart.options.onClick = (evt, elements) => {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        const modeName = modeChart.data.labels[idx];
+                        // Need to match from records
+                        const records = window.PACEMAKER_DATA.records;
+                        const matched = [];
+                        Object.entries(records).forEach(([fn, patient]) => {
+                            const recs = patient['程控记录'] || [];
+                            if (recs.length === 0) return;
+                            const latest = recs[recs.length - 1];
+                            const mode = latest.basic_params?.settings?.['模式'];
+                            if (mode && mode.trim().toUpperCase() === modeName) {
+                                matched.push({
+                                    name: patient['姓名'],
+                                    id: patient['登记号'],
+                                    brand: latest.header?.['品牌'] || '--',
+                                    model: latest.header?.['型号'] || '--',
+                                    implant_date: latest.header?.['植入日期'] || '--',
+                                    count: recs.length,
+                                    file_name: fn
+                                });
+                            }
+                        });
+                        openDrilldown(`起搏模式: ${modeName} (${matched.length}人)`, matched);
+                    }
+                };
+                modeChart.update();
+            }
+
+            // 4. Battery Voltage chart → filter by voltage range
+            const voltChart = deepCharts[1];
+            if (voltChart) {
+                voltChart.options.onClick = (evt, elements) => {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        const rangeLabel = voltChart.data.labels[idx];
+                        const ranges = [[0, 2.4], [2.4, 2.6], [2.6, 2.8], [2.8, 3.0], [3.0, 3.2], [3.2, 99]];
+                        const [lo, hi] = ranges[idx];
+                        const records = window.PACEMAKER_DATA.records;
+                        const matched = [];
+                        Object.entries(records).forEach(([fn, patient]) => {
+                            const recs = patient['程控记录'] || [];
+                            if (recs.length === 0) return;
+                            const latest = recs[recs.length - 1];
+                            const batt = latest.test_params?.battery_and_leads;
+                            const vStr = batt?.['电池电压（V）'] || batt?.['电池电压(V)'] || batt?.['电池电压'];
+                            if (vStr) {
+                                const v = parseFloat(vStr);
+                                if (!isNaN(v) && v >= lo && v < hi) {
+                                    matched.push({
+                                        name: patient['姓名'],
+                                        id: patient['登记号'],
+                                        brand: latest.header?.['品牌'] || '--',
+                                        model: latest.header?.['型号'] || '--',
+                                        implant_date: latest.header?.['植入日期'] || '--',
+                                        count: recs.length,
+                                        file_name: fn
+                                    });
+                                }
+                            }
+                        });
+                        openDrilldown(`电池电压: ${rangeLabel} (${matched.length}人)`, matched);
+                    }
+                };
+                voltChart.update();
+            }
+        }
+
+        // Attach drill-down after initial render
+        setTimeout(attachDrilldownHandlers, 200);
     });
 
 })();

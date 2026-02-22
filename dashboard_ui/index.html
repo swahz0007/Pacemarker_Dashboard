@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pacemaker Dashboard</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=200">
+    <link rel="stylesheet" href="assets/css/style.css?v=300">
     <!-- Google Fonts for Medical Aesthetic -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -18,7 +18,7 @@
 <body>
     <div class="app-container">
         <!-- Sidebar: Patient List -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>程控报告查询系统</h2>
                 <div class="search-box">
@@ -42,8 +42,13 @@
             <!-- Dashboard Overview -->
             <div id="dashboardView" class="dashboard-view">
                 <div class="dashboard-header">
-                    <h2>📊 数据总览</h2>
-                    <p class="dashboard-subtitle">起搏器程控数据库统计分析</p>
+                    <div>
+                        <h2>📊 数据总览</h2>
+                        <p class="dashboard-subtitle">起搏器程控数据库统计分析</p>
+                    </div>
+                    <button id="fullscreenBtn" class="fullscreen-btn" title="全屏大屏模式">
+                        🖥️ 大屏模式
+                    </button>
                 </div>
 
                 <!-- KPI Cards Row -->
@@ -111,6 +116,77 @@
                         <h3><span class="icon">⏱️</span> 设备使用年限</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartDeviceAge"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deep Statistics Section -->
+                <div class="dashboard-section-title">
+                    <h2>🔬 深度临床统计</h2>
+                    <p class="dashboard-subtitle">基于全部程控记录的深度数据挖掘</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Row 4 -->
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">💓</span> 起搏模式分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartPacingMode"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">🔋</span> 电池电压分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartBatteryVolt"></canvas>
+                        </div>
+                    </div>
+                    <!-- Row 5 -->
+                    <div class="card dash-chart-card full-width">
+                        <h3><span class="icon">📅</span> 月度程控量趋势</h3>
+                        <div class="dash-chart-wrap dash-chart-line">
+                            <canvas id="chartMonthlyTrend"></canvas>
+                        </div>
+                    </div>
+                    <!-- Row 6 -->
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">⚡</span> AT/AF 负荷分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartAfBurden"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card alert-list-card">
+                        <h3><span class="icon">🚨</span> 电池预警患者</h3>
+                        <div class="alert-list-wrap">
+                            <div id="batteryAlertList" class="battery-alert-list">
+                                <p class="text-muted">加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lead Parameters Section -->
+                <div class="dashboard-section-title">
+                    <h2>🔌 导线参数 & 随访依从性</h2>
+                    <p class="dashboard-subtitle">阻抗、阈值分布与随访次数分析</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card dash-chart-card full-width">
+                        <h3><span class="icon">📊</span> 导线阻抗分布 (RA / RV / LV)</h3>
+                        <div class="dash-chart-wrap dash-chart-line">
+                            <canvas id="chartImpedance"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">⚡</span> 起搏阈值分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartThreshold"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">📋</span> 随访依从性</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartCompliance"></canvas>
                         </div>
                     </div>
                 </div>
@@ -242,6 +318,18 @@
                 </div>
             </div>
         </main>
+    </div>
+    <!-- Drill-down Modal -->
+    <div id="drilldownModal" class="drilldown-overlay hidden">
+        <div class="drilldown-panel">
+            <div class="drilldown-header">
+                <h3 id="drilldownTitle">下钻详情</h3>
+                <button id="drilldownClose" class="drilldown-close">&times;</button>
+            </div>
+            <div id="drilldownContent" class="drilldown-content">
+                <!-- Populated by JS -->
+            </div>
+        </div>
     </div>
     <script src="data/data_bundle.js"></script>
     <script src="assets/js/app.js"></script>
