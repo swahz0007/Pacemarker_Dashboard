@@ -206,17 +206,20 @@ def extract_events_flexible(handler, start_row, end_row):
 
 
 def validate_and_fix_header(d_header: dict, filename: str) -> dict:
-    """校验并修复 header 数据：如果文件名姓名与 header 姓名不匹配，用文件名姓名覆盖并清空登记号"""
+    """校验并修复 header 数据：姓名不匹配时仅用文件名姓名覆盖，但保留登记号"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     header_name = d_header.get("姓名", "")
     filename_name = extract_name_from_filename(filename)
     
     if not header_name or not filename_name:
         return d_header
     
-    # 姓名不匹配时，整个 header 被污染，修正姓名并清空登记号
+    # 姓名不匹配时，修正姓名但保留登记号（登记号是独立字段，不应被清空）
     if filename_name not in header_name and header_name not in filename_name:
+        logger.warning(f"姓名不匹配: 文件名='{filename_name}', header='{header_name}', 文件={filename}")
         d_header["姓名"] = filename_name
-        d_header["登记号"] = ""  # 清空污染的登记号，避免错误分组
     
     return d_header
 

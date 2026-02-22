@@ -16,9 +16,20 @@ class XlsHandler:
 
     def __init__(self, filepath):
         self.book = xlrd.open_workbook(filepath, formatting_info=True)
-        self.sheet = self.book.sheet_by_index(0)
+        # 智能选择Sheet：优先选择最后一个有数据的Sheet
+        # 雅培模板文件中Sheet0是旧模板数据，实际患者数据在Sheet1
+        self.sheet = self._select_best_sheet()
         self.nrows = self.sheet.nrows
         self.ncols = self.sheet.ncols
+
+    def _select_best_sheet(self):
+        """选择最后一个有数据的Sheet（避免读取模板Sheet）"""
+        best_sheet = self.book.sheet_by_index(0)
+        for i in range(self.book.nsheets):
+            s = self.book.sheet_by_index(i)
+            if s.nrows > 0:
+                best_sheet = s  # 不断更新为最后一个有数据的sheet
+        return best_sheet
 
     def get_cell_value(self, r, c):
         return self.sheet.cell_value(r, c) if r < self.nrows and c < self.ncols else ""

@@ -26,6 +26,8 @@ def generate_bundle():
     for file_path in patient_files:
         try:
             filename = os.path.basename(file_path)
+            if filename == 'processed_files.json' or filename == 'matching_report.csv':
+                continue
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 

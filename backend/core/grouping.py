@@ -13,22 +13,27 @@ from core.utils import extract_name_from_filename, parse_date
 
 
 def is_valid_record(record: dict) -> bool:
-    """校验记录有效性：文件名中的姓名应与header中的姓名匹配"""
+    """校验记录有效性：仅检查关键字段是否存在（不再过滤姓名不匹配的记录）"""
     filename = record.get("meta", {}).get("filename", "")
     header_name = record.get("header", {}).get("姓名", "")
     
-    if not filename or not header_name:
+    if not filename:
         return False
     
-    filename_name = extract_name_from_filename(filename)
+    # 姓名不匹配时仅警告，不过滤
+    if header_name:
+        filename_name = extract_name_from_filename(filename)
+        if filename_name and filename_name not in header_name and header_name not in filename_name:
+            print(f"  [警告] 姓名不匹配但保留: 文件名='{filename_name}', header='{header_name}'")
     
-    return filename_name in header_name or header_name in filename_name
+    return True
 
 
 def group_by_registration_id(data: list) -> dict:
-    """按登记号分组（仅保留有效记录）"""
+    """按登记号分组（保留所有有效记录，空登记号用代理ID）"""
     grouped = defaultdict(list)
     invalid_count = 0
+    proxy_count = 0
     
     for record in data:
         if not is_valid_record(record):
@@ -36,10 +41,18 @@ def group_by_registration_id(data: list) -> dict:
             continue
         
         reg_id = record.get("header", {}).get("登记号", "")
-        if reg_id:
-            grouped[reg_id].append(record)
+        if not reg_id:
+            # 用文件名生成代理登记号，确保不丢失数据
+            filename = record.get("meta", {}).get("filename", "unknown")
+            reg_id = f"PROXY_{filename.replace('.xls', '').replace('.xlsx', '')}"
+            record.setdefault("header", {})["登记号"] = reg_id
+            proxy_count += 1
+        
+        grouped[reg_id].append(record)
     
-    print(f"过滤脏数据: {invalid_count}条")
+    print(f"过滤无效记录: {invalid_count}条")
+    if proxy_count > 0:
+        print(f"代理登记号: {proxy_count}条（原始登记号为空）")
     return grouped
 
 
