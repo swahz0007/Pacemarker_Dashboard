@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pacemaker Dashboard</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=109">
+    <link rel="stylesheet" href="assets/css/style.css?v=200">
     <!-- Google Fonts for Medical Aesthetic -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -39,15 +39,89 @@
 
         <!-- Main Content: Patient Details -->
         <main class="main-content" id="mainContent">
-            <!-- Empty State -->
-            <div id="emptyState" class="empty-state">
-                <div class="icon">🫀</div>
-                <h3>请在左侧选择一位患者</h3>
-                <p>查看详细的程控记录及设备状态。</p>
+            <!-- Dashboard Overview -->
+            <div id="dashboardView" class="dashboard-view">
+                <div class="dashboard-header">
+                    <h2>📊 数据总览</h2>
+                    <p class="dashboard-subtitle">起搏器程控数据库统计分析</p>
+                </div>
+
+                <!-- KPI Cards Row -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">👥</div>
+                        <div class="kpi-body">
+                            <span class="kpi-value" id="kpiTotalPatients">0</span>
+                            <span class="kpi-label">患者总数</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🏭</div>
+                        <div class="kpi-body">
+                            <span class="kpi-value" id="kpiBrandCount">0</span>
+                            <span class="kpi-label">设备品牌</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📋</div>
+                        <div class="kpi-body">
+                            <span class="kpi-value" id="kpiAvgVisits">0</span>
+                            <span class="kpi-label">平均程控次数</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">📅</div>
+                        <div class="kpi-body">
+                            <span class="kpi-value" id="kpiLatestImplant">--</span>
+                            <span class="kpi-label">最新植入日期</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="dashboard-grid">
+                    <!-- Row 1 -->
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">🏭</span> 品牌分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartBrand"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">📱</span> 型号 Top 10</h3>
+                        <div class="dash-chart-wrap dash-chart-bar">
+                            <canvas id="chartModel"></canvas>
+                        </div>
+                    </div>
+                    <!-- Row 2 -->
+                    <div class="card dash-chart-card full-width">
+                        <h3><span class="icon">📈</span> 植入年份趋势</h3>
+                        <div class="dash-chart-wrap dash-chart-line">
+                            <canvas id="chartYearTrend"></canvas>
+                        </div>
+                    </div>
+                    <!-- Row 3 -->
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">🔢</span> 程控次数分布</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartVisitDist"></canvas>
+                        </div>
+                    </div>
+                    <div class="card dash-chart-card">
+                        <h3><span class="icon">⏱️</span> 设备使用年限</h3>
+                        <div class="dash-chart-wrap">
+                            <canvas id="chartDeviceAge"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Detail View (Hidden by default) -->
             <div id="patientDetail" class="patient-detail hidden">
+                <!-- Back Button -->
+                <button id="backToDashboard" class="back-to-dashboard">
+                    ← 返回总览
+                </button>
                 <!-- Header -->
                 <header class="patient-header">
                     <div class="patient-info">

@@ -17,10 +17,12 @@
         list: null,
         search: null,
         count: null,
-        empty: null,
         detail: null,
         tabs: null,
         panes: null,
+        // Dashboard view
+        dashboardView: null,
+        backBtn: null,
         // Detail view elements
         pName: null, pId: null, dBrand: null, dModel: null, dDate: null,
         batStatus: null, batLife: null,
@@ -32,6 +34,7 @@
     };
 
     let chartInstance = null;
+    let dashboardCharts = [];
 
     // --- Utility Functions ---
 
@@ -198,8 +201,9 @@
         dom.list = document.getElementById('patientList');
         dom.search = document.getElementById('patientSearch');
         dom.count = document.getElementById('patientCount');
-        dom.empty = document.getElementById('emptyState');
+        dom.dashboardView = document.getElementById('dashboardView');
         dom.detail = document.getElementById('patientDetail');
+        dom.backBtn = document.getElementById('backToDashboard');
         dom.tabs = document.querySelectorAll('.tab-btn');
         dom.panes = document.querySelectorAll('.tab-pane');
 
@@ -249,12 +253,297 @@
             currentPatient = parsePatientData(data);
             renderPatient(currentPatient);
 
-            dom.empty.classList.add('hidden');
-            dom.detail.classList.remove('hidden');
+            showPatientDetail();
         } catch (err) {
             console.error(err);
             alert('Could not load patient data: ' + err.message);
         }
+    }
+
+    // --- View Switching ---
+
+    function showDashboard() {
+        dom.dashboardView.classList.remove('hidden');
+        dom.detail.classList.add('hidden');
+        document.querySelectorAll('.patient-item').forEach(i => i.classList.remove('active'));
+        currentPatient = null;
+    }
+
+    function showPatientDetail() {
+        dom.dashboardView.classList.add('hidden');
+        dom.detail.classList.remove('hidden');
+    }
+
+    // --- Dashboard Statistics ---
+
+    function getThemeColors() {
+        const ct = document.documentElement.getAttribute('data-theme');
+        const isSysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = ct === 'dark' || (!ct && isSysDark);
+        return {
+            isDark,
+            text: isDark ? '#CBD5E1' : '#718096',
+            grid: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+            tooltipBg: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
+            tooltipTitle: isDark ? '#F8FAFC' : '#1E293B',
+            tooltipBody: isDark ? '#CBD5E1' : '#64748B',
+            tooltipBorder: isDark ? '#334155' : '#E2E8F0'
+        };
+    }
+
+    const CHART_PALETTE = [
+        '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+        '#EC4899', '#06B6D4', '#F97316', '#14B8A6', '#6366F1',
+        '#84CC16', '#E11D48', '#0EA5E9', '#A855F7', '#22D3EE'
+    ];
+
+    function aggregateStats(patients) {
+        const brandMap = {};
+        const modelMap = {};
+        const yearMap = {};
+        const visitBuckets = { '1次': 0, '2次': 0, '3次': 0, '4次': 0, '5次+': 0 };
+        const ageBuckets = { '<1年': 0, '1-3年': 0, '3-5年': 0, '5-10年': 0, '10年+': 0, '未知': 0 };
+        let latestDate = '';
+        let totalVisits = 0;
+
+        patients.forEach(p => {
+            // Brand
+            const b = p.brand || '未知';
+            brandMap[b] = (brandMap[b] || 0) + 1;
+
+            // Model
+            const m = p.model || '未知';
+            modelMap[m] = (modelMap[m] || 0) + 1;
+
+            // Visits
+            const cnt = p.count || 1;
+            totalVisits += cnt;
+            if (cnt >= 5) visitBuckets['5次+']++;
+            else visitBuckets[cnt + '次']++;
+
+            // Implant date parsing
+            const ts = parseToTimestamp(p.implant_date);
+            if (ts > 0) {
+                const d = new Date(ts);
+                const yr = d.getFullYear();
+                if (yr >= 2000 && yr <= 2030) {
+                    yearMap[yr] = (yearMap[yr] || 0) + 1;
+                    const dateStr = formatDate(p.implant_date);
+                    if (dateStr > latestDate) latestDate = dateStr;
+
+                    // Device age
+                    const ageYears = (Date.now() - ts) / (365.25 * 24 * 3600 * 1000);
+                    if (ageYears < 1) ageBuckets['<1年']++;
+                    else if (ageYears < 3) ageBuckets['1-3年']++;
+                    else if (ageYears < 5) ageBuckets['3-5年']++;
+                    else if (ageYears < 10) ageBuckets['5-10年']++;
+                    else ageBuckets['10年+']++;
+                } else {
+                    ageBuckets['未知']++;
+                }
+            } else {
+                ageBuckets['未知']++;
+            }
+        });
+
+        // Sort years
+        const years = Object.keys(yearMap).map(Number).sort((a, b) => a - b);
+        const yearLabels = years.map(String);
+        const yearValues = years.map(y => yearMap[y]);
+
+        // Model top 10
+        const modelSorted = Object.entries(modelMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+        return {
+            total: patients.length,
+            brandCount: Object.keys(brandMap).length,
+            avgVisits: patients.length > 0 ? (totalVisits / patients.length).toFixed(1) : 0,
+            latestDate: latestDate || '--',
+            brandLabels: Object.keys(brandMap),
+            brandValues: Object.values(brandMap),
+            modelLabels: modelSorted.map(e => e[0]),
+            modelValues: modelSorted.map(e => e[1]),
+            yearLabels,
+            yearValues,
+            visitLabels: Object.keys(visitBuckets),
+            visitValues: Object.values(visitBuckets),
+            ageLabels: Object.keys(ageBuckets),
+            ageValues: Object.values(ageBuckets)
+        };
+    }
+
+    function animateValue(el, target, suffix) {
+        suffix = suffix || '';
+        const isFloat = String(target).includes('.');
+        const duration = 800;
+        const start = performance.now();
+        const end = parseFloat(target);
+        if (isNaN(end)) { el.textContent = target; return; }
+        function step(now) {
+            const progress = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const val = eased * end;
+            el.textContent = (isFloat ? val.toFixed(1) : Math.round(val)) + suffix;
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    function renderDashboard() {
+        if (!allPatients || allPatients.length === 0) return;
+
+        const stats = aggregateStats(allPatients);
+        const tc = getThemeColors();
+
+        // KPI animation
+        animateValue(document.getElementById('kpiTotalPatients'), stats.total);
+        animateValue(document.getElementById('kpiBrandCount'), stats.brandCount);
+        animateValue(document.getElementById('kpiAvgVisits'), stats.avgVisits);
+        document.getElementById('kpiLatestImplant').textContent = stats.latestDate;
+
+        // Destroy old charts
+        dashboardCharts.forEach(c => c.destroy());
+        dashboardCharts = [];
+
+        const commonTooltip = {
+            backgroundColor: tc.tooltipBg,
+            titleColor: tc.tooltipTitle,
+            bodyColor: tc.tooltipBody,
+            borderColor: tc.tooltipBorder,
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8
+        };
+
+        // 1. Brand Doughnut
+        dashboardCharts.push(new Chart(document.getElementById('chartBrand'), {
+            type: 'doughnut',
+            data: {
+                labels: stats.brandLabels,
+                datasets: [{
+                    data: stats.brandValues,
+                    backgroundColor: CHART_PALETTE.slice(0, stats.brandLabels.length),
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: 16, usePointStyle: true, pointStyleWidth: 8, font: { size: 12 } } },
+                    tooltip: commonTooltip
+                }
+            }
+        }));
+
+        // 2. Model Top 10 - Horizontal Bar
+        dashboardCharts.push(new Chart(document.getElementById('chartModel'), {
+            type: 'bar',
+            data: {
+                labels: stats.modelLabels,
+                datasets: [{
+                    data: stats.modelValues,
+                    backgroundColor: CHART_PALETTE.slice(0, stats.modelLabels.length).map(c => c + '99'),
+                    borderColor: CHART_PALETTE.slice(0, stats.modelLabels.length),
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    barThickness: 18
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: commonTooltip
+                },
+                scales: {
+                    x: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true },
+                    y: { grid: { display: false }, ticks: { color: tc.text, font: { family: "'JetBrains Mono', monospace", size: 11 } } }
+                }
+            }
+        }));
+
+        // 3. Year Trend - Area Chart
+        dashboardCharts.push(new Chart(document.getElementById('chartYearTrend'), {
+            type: 'line',
+            data: {
+                labels: stats.yearLabels,
+                datasets: [{
+                    label: '植入数量',
+                    data: stats.yearValues,
+                    borderColor: '#3B82F6',
+                    backgroundColor: tc.isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#3B82F6',
+                    pointRadius: 4,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: commonTooltip
+                },
+                scales: {
+                    x: { grid: { color: tc.grid }, ticks: { color: tc.text } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 4. Visit Distribution - Bar
+        dashboardCharts.push(new Chart(document.getElementById('chartVisitDist'), {
+            type: 'bar',
+            data: {
+                labels: stats.visitLabels,
+                datasets: [{
+                    label: '患者数',
+                    data: stats.visitValues,
+                    backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'].map(c => c + '99'),
+                    borderColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: commonTooltip
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: tc.text } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        }));
+
+        // 5. Device Age - Doughnut
+        const ageColors = ['#06B6D4', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#94A3B8'];
+        dashboardCharts.push(new Chart(document.getElementById('chartDeviceAge'), {
+            type: 'doughnut',
+            data: {
+                labels: stats.ageLabels,
+                datasets: [{
+                    data: stats.ageValues,
+                    backgroundColor: ageColors,
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: 12, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } },
+                    tooltip: commonTooltip
+                }
+            }
+        }));
     }
 
     // --- UI Rendering ---
@@ -561,7 +850,10 @@
     // --- Initialization ---
     document.addEventListener('DOMContentLoaded', () => {
         initDOM();
-        setTimeout(loadIndex, 50);
+        setTimeout(() => {
+            loadIndex();
+            renderDashboard();
+        }, 50);
 
         // Tabs
         dom.tabs.forEach(btn => {
@@ -572,6 +864,11 @@
         dom.search.addEventListener('input', (e) => {
             handleSearch(e.target.value);
         });
+
+        // Back to Dashboard
+        if (dom.backBtn) {
+            dom.backBtn.addEventListener('click', showDashboard);
+        }
 
         // Theme Toggle Logic
         const themeBtn = document.getElementById('themeToggleBtn');
@@ -590,9 +887,11 @@
                 document.documentElement.setAttribute('data-theme', newTheme);
                 localStorage.setItem('pm_theme', newTheme);
 
-                // Re-render chart to update colors based on new theme
+                // Re-render charts to update colors
                 if (currentPatient) {
                     renderTrendsChart(currentPatient);
+                } else {
+                    renderDashboard();
                 }
             });
         }
