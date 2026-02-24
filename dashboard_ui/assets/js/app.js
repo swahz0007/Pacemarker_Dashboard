@@ -300,6 +300,7 @@
     function aggregateStats(patients) {
         const brandMap = {};
         const modelMap = {};
+        const modelToBrandMap = {};
         const yearMap = {};
         const visitBuckets = { '1次': 0, '2次': 0, '3次': 0, '4次': 0, '5次+': 0 };
         const ageBuckets = { '<1年': 0, '1-3年': 0, '3-5年': 0, '5-10年': 0, '10年+': 0, '未知': 0 };
@@ -314,6 +315,9 @@
             // Model
             const m = p.model || '未知';
             modelMap[m] = (modelMap[m] || 0) + 1;
+            if (m !== '未知') {
+                modelToBrandMap[m] = p.brand || '未知';
+            }
 
             // Visits
             const cnt = p.count || 1;
@@ -363,6 +367,7 @@
             brandValues: Object.values(brandMap),
             modelLabels: modelSorted.map(e => e[0]),
             modelValues: modelSorted.map(e => e[1]),
+            modelToBrand: modelToBrandMap,
             yearLabels,
             yearValues,
             visitLabels: Object.keys(visitBuckets),
@@ -454,13 +459,38 @@
             options: {
                 indexAxis: 'y',
                 responsive: true, maintainAspectRatio: false,
+                layout: {
+                    padding: { left: 20 } // 增大左侧安全间距，防止较长的中文字符被画布截断
+                },
                 plugins: {
                     legend: { display: false },
-                    tooltip: commonTooltip
+                    tooltip: {
+                        ...commonTooltip,
+                        callbacks: {
+                            title: function (context) {
+                                const modelLabel = context[0].label;
+                                const brand = stats.modelToBrand[modelLabel] || '';
+                                return brand && brand !== '未知' ? `${brand} ${modelLabel}` : modelLabel;
+                            }
+                        }
+                    }
                 },
                 scales: {
                     x: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true },
-                    y: { grid: { display: false }, ticks: { color: tc.text, font: { family: "'JetBrains Mono', monospace", size: 11 } } }
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: tc.text,
+                            font: { family: "system-ui, -apple-system, sans-serif", size: 11 },
+                            padding: 8,
+                            crossAlign: 'near',
+                            callback: function (value, index, values) {
+                                const modelLabel = this.getLabelForValue(value);
+                                const brand = stats.modelToBrand[modelLabel] || '';
+                                return brand && brand !== '未知' ? `${brand} ${modelLabel}` : modelLabel;
+                            }
+                        }
+                    }
                 }
             }
         }));
