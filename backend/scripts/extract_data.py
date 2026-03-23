@@ -39,7 +39,8 @@ def extract_all_data():
             print(f"已处理 {i + 1}/{len(files)}...")
         json_output.append(process_file(file["Full Path"], file["Filename"]))
 
-    print(f"数据提取完成，共 {len(json_output)} 条记录。")
+    error_count = sum(1 for r in json_output if "error" in r.get("meta", {}))
+    print(f"数据提取完成，共 {len(json_output)} 条记录（成功 {len(json_output) - error_count}, 失败 {error_count}）。")
     return json_output
 
 

@@ -3,9 +3,7 @@
 核心数据抽取逻辑
 """
 
-import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
     KW_BASIC, KW_ANTITACHY, KW_TEST, KW_EVENT,
@@ -95,10 +93,36 @@ def find_value_smart(handler, r, start_c):
     return ""
 
 
+def find_full_row_text(handler, r, start_c):
+    """读取 key 右侧所有非空非蓝色单元格的内容，拼接为完整文本。
+    用于结论、事件说明等可能跨多列合并的长文本字段。"""
+    parts = []
+    for offset in range(1, handler.ncols - start_c):
+        curr_c = start_c + offset
+        if curr_c >= handler.ncols:
+            break
+        val = clean_value(handler.get_cell_value(r, curr_c))
+        if handler.is_blue_cell(r, curr_c) and val:
+            break  # 遇到下一个标签列，停止
+        if val:
+            parts.append(val)
+    return "，".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+
+
+# 需要读取全行文本的长文本字段
+_LONG_TEXT_FIELDS = {"结论", "备注", "AT/AF事件说明", "快心室率事件说明",
+                     "快心室率说明", "快心房率事件说明", "快心室率事件说明",
+                     "其余事件", "建议下次程控时间"}
+
+# 事件区域的重复列标签，由 extract_events_flexible 以复合键提取，kv 提取跳过
+_EVENT_COL_LABELS = {"持续最长时间", "治疗类型"}
+
+
 def extract_kv_in_range(handler, start_row, end_row):
     """在指定范围内提取键值对"""
     data = {}
     conclusion_row = None
+    seen_labels = set()  # 防止合并单元格导致重复读取
     for r in range(start_row, end_row):
         for c in range(handler.ncols):
             if handler.is_blue_cell(r, c):
@@ -106,7 +130,18 @@ def extract_kv_in_range(handler, start_row, end_row):
                 if "结论" in label:
                     conclusion_row = r
                 if label and not is_ignored(label):
-                    data[label] = find_value_smart(handler, r, c)
+                    # 跳过事件区列标签（由 extract_events_flexible 以复合键提取）
+                    if label in _EVENT_COL_LABELS:
+                        continue
+                    # 对于合并单元格产生的重复 label，只取第一次出现
+                    if label in seen_labels:
+                        continue
+                    seen_labels.add(label)
+                    # 长文本字段使用全行读取
+                    if label in _LONG_TEXT_FIELDS:
+                        data[label] = find_full_row_text(handler, r, c)
+                    else:
+                        data[label] = find_value_smart(handler, r, c)
     return data, conclusion_row
 
 
@@ -148,18 +183,10 @@ def extract_footer_info(handler, conc_row):
                 return True
         return False
 
-    # 扩大扫描范围：确保能覆盖表格最后50行
-    scan_range = 2
-    max_scan = min(handler.nrows - conc_row, 50)  # 最多扫描50行
+    # 直接扫描结论行之后最多50行，提取签名和日期
+    scan_end = min(conc_row + 1 + 50, handler.nrows)
 
-    while scan_range <= max_scan:
-        if has_data_in_rows(conc_row + 1, conc_row + 1 + scan_range):
-            break
-        scan_range += 1
-        if scan_range > 50:  # 扩展到50行
-            break
-
-    for r in range(conc_row + 1, min(conc_row + 1 + scan_range, handler.nrows)):
+    for r in range(conc_row + 1, scan_end):
         row_content = []
         for c in range(handler.ncols):
             raw_val = handler.get_cell_value(r, c)
@@ -187,21 +214,59 @@ def extract_footer_info(handler, conc_row):
 
 
 def extract_events_flexible(handler, start_row, end_row):
-    """更灵活的事件提取，支持非蓝色单元格"""
+    """更灵活的事件提取，支持非蓝色单元格和重复列标签。
+    
+    事件区域的典型行结构：
+      [事件名次数] | 值 | [持续最长时间] | 值 | [负荷%/治疗类型] | 值
+    
+    对"持续最长时间"等重复列标签，生成复合键：
+      AT/AF事件次数 → AT/AF_持续最长时间
+      VF次数 → VF_持续最长时间
+    """
     data = {}
+    # 已知的"列标签"（在同一行中不作为独立 key，而是与行首标签组合）
+    col_labels = {"持续最长时间", "治疗类型", "AT/AF负荷%"}
+    
     for r in range(start_row, end_row):
+        # 收集该行所有非空单元格
         row_content = []
         for c in range(handler.ncols):
             val = clean_value(handler.get_cell_value(r, c))
             if val:
-                row_content.append((c, val))
-        if len(row_content) >= 2:
-            for i in range(len(row_content) - 1):
-                c1, v1 = row_content[i]
-                if handler.is_blue_cell(r, c1):
-                    key = v1
-                    if not is_ignored(key) and len(key) > 0:
-                        data[key] = find_value_smart(handler, r, c1)
+                is_label = handler.is_blue_cell(r, c)
+                row_content.append((c, val, is_label))
+        
+        if len(row_content) < 2:
+            continue
+        
+        # 该行第一个单元格作为"行标签"
+        row_label = row_content[0][1] if row_content else ""
+        # 去掉行标签中可能的括号后缀，得到前缀
+        row_prefix = row_label.replace("次数", "").replace("事件", "").strip()
+        
+        # 遍历行内容，提取 key-value 对
+        i = 0
+        while i < len(row_content):
+            c, v, is_label = row_content[i]
+            
+            # 判断这个单元格是否是一个标签
+            # （蓝色，或者是已知的列标签文本）
+            is_known_label = v in col_labels or is_label
+            
+            if is_known_label and not is_ignored(v):
+                # 找紧跟其后的值
+                value = find_value_smart(handler, r, c)
+                
+                if v in col_labels and row_prefix:
+                    # 重复列标签 → 生成复合键
+                    compound_key = f"{row_prefix}_{v}"
+                    data[compound_key] = value
+                elif is_label:
+                    # 普通蓝色标签
+                    if v not in data:  # 避免覆盖已有值
+                        data[v] = value
+            i += 1
+    
     return data
 
 
@@ -226,6 +291,7 @@ def validate_and_fix_header(d_header: dict, filename: str) -> dict:
 
 def process_file(filepath, filename):
     """处理单个文件并返回结构化数据"""
+    handler = None
     try:
         handler = get_handler(filepath)
         anchors = get_anchors(handler)
@@ -233,10 +299,24 @@ def process_file(filepath, filename):
         rb = anchors["basic"] or handler.nrows
         rat = anchors["antitachy"]
         rt = anchors["test"] or handler.nrows
-        re_row = anchors["event"] or handler.nrows
+        event_row = anchors["event"] or handler.nrows
         basic_end = rat if rat else rt
 
         d_header, _ = extract_kv_in_range(handler, 0, rb)
+        
+        # 兜底：非蓝色模板的 header 提取（ICD/CRT-D 等模板标签无蓝色背景）
+        _HEADER_KEYS = {"姓名", "性别", "年龄（岁）", "年龄", "登记号", 
+                        "品牌", "型号", "植入日期"}
+        missing_keys = _HEADER_KEYS - set(d_header.keys())
+        if missing_keys:
+            for r in range(0, min(rb, 5)):
+                for c in range(handler.ncols):
+                    label = clean_label(handler.get_cell_value(r, c))
+                    if label in missing_keys:
+                        val = find_value_smart(handler, r, c)
+                        if val:
+                            d_header[label] = val
+                            missing_keys.discard(label)
         
         # 校验并修复 header 数据
         d_header = validate_and_fix_header(d_header, filename)
@@ -248,16 +328,19 @@ def process_file(filepath, filename):
         if rat:
             d_antitachy = extract_antitachy_table(handler, rat, rt)
 
-        d_test, _ = extract_kv_in_range(handler, rt, re_row)
-        d_test_tbl = extract_table_in_range(handler, rt, re_row, Z3_COL_HEADERS, Z3_ROW_HEADERS)
+        d_test, _ = extract_kv_in_range(handler, rt, event_row)
+        d_test_tbl = extract_table_in_range(handler, rt, event_row, Z3_COL_HEADERS, Z3_ROW_HEADERS)
         
-        d_events, conc_row = extract_kv_in_range(handler, re_row, handler.nrows)
-        d_events_flexible = extract_events_flexible(handler, re_row, handler.nrows)
+        d_events, conc_row = extract_kv_in_range(handler, event_row, handler.nrows)
+        d_events_flexible = extract_events_flexible(handler, event_row, handler.nrows)
         d_events.update(d_events_flexible)
 
         sig_text, sig_date = ("", "")
         if conc_row is not None:
             sig_text, sig_date = extract_footer_info(handler, conc_row)
+        else:
+            # 兜底：非蓝色模板可能没有标记结论行，从事件区域开始扫描签名/日期
+            sig_text, sig_date = extract_footer_info(handler, event_row)
 
         result = {
             "meta": {"filename": filename, "path": filepath},
@@ -275,4 +358,8 @@ def process_file(filepath, filename):
         return result
     except Exception as e:
         return {"meta": {"filename": filename, "error": str(e)}}
+    finally:
+        if handler and hasattr(handler, 'close'):
+            handler.close()
+
 

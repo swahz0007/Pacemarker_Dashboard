@@ -10,7 +10,6 @@
     let allPatients = [];
     let currentPatient = null;
     let currentTab = 'overview';
-    let searchDebounceTimer = null;
 
     // --- Cached DOM Elements ---
     const dom = {
@@ -38,10 +37,29 @@
 
     // --- Utility Functions ---
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        const s = String(str);
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     function debounce(func, wait) {
+        let timer = null;
         return function (...args) {
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(() => func.apply(this, args), wait);
+            clearTimeout(timer);
+            timer = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    function makeTooltipConfig(tc) {
+        return {
+            backgroundColor: tc.tooltipBg,
+            titleColor: tc.tooltipTitle,
+            bodyColor: tc.tooltipBody,
+            borderColor: tc.tooltipBorder,
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8
         };
     }
 
@@ -410,15 +428,7 @@
         dashboardCharts.forEach(c => c.destroy());
         dashboardCharts = [];
 
-        const commonTooltip = {
-            backgroundColor: tc.tooltipBg,
-            titleColor: tc.tooltipTitle,
-            bodyColor: tc.tooltipBody,
-            borderColor: tc.tooltipBorder,
-            borderWidth: 1,
-            padding: 12,
-            cornerRadius: 8
-        };
+        const commonTooltip = makeTooltipConfig(tc);
 
         // 1. Brand Doughnut
         dashboardCharts.push(new Chart(document.getElementById('chartBrand'), {
@@ -696,13 +706,7 @@
         deepCharts.forEach(c => c.destroy());
         deepCharts = [];
 
-        const commonTooltip = {
-            backgroundColor: tc.tooltipBg,
-            titleColor: tc.tooltipTitle,
-            bodyColor: tc.tooltipBody,
-            borderColor: tc.tooltipBorder,
-            borderWidth: 1, padding: 12, cornerRadius: 8
-        };
+        const commonTooltip = makeTooltipConfig(tc);
 
         // 1. Pacing Mode - Doughnut
         const modeColors = [
@@ -817,11 +821,11 @@
             html += '<div class="alert-table-scroll"><table class="alert-table"><thead><tr><th>姓名</th><th>登记号</th><th>电压</th><th>状态</th></tr></thead><tbody>';
             ds.batteryAlerts.forEach(a => {
                 const vClass = a.voltage < 2.4 ? 'volt-critical' : 'volt-warning';
-                html += `<tr class="alert-row clickable" data-file="${a.file_name}">`;
-                html += `<td>${a.name}</td>`;
-                html += `<td class="mono">${a.id}</td>`;
+                html += `<tr class="alert-row clickable" data-file="${escapeHtml(a.file_name)}">`;
+                html += `<td>${escapeHtml(a.name)}</td>`;
+                html += `<td class="mono">${escapeHtml(a.id)}</td>`;
                 html += `<td class="${vClass}">${a.voltage.toFixed(2)}V</td>`;
-                html += `<td>${a.status || a.life || '--'}</td>`;
+                html += `<td>${escapeHtml(a.status || a.life || '--')}</td>`;
                 html += '</tr>';
             });
             html += '</tbody></table></div>';
@@ -885,13 +889,7 @@
         leadParamCharts.forEach(c => c.destroy());
         leadParamCharts = [];
 
-        const commonTooltip = {
-            backgroundColor: tc.tooltipBg,
-            titleColor: tc.tooltipTitle,
-            bodyColor: tc.tooltipBody,
-            borderColor: tc.tooltipBorder,
-            borderWidth: 1, padding: 12, cornerRadius: 8
-        };
+        const commonTooltip = makeTooltipConfig(tc);
 
         // Helper: bucket an array into ranges
         function bucketize(arr, ranges) {
@@ -998,11 +996,14 @@
         patients.forEach(p => {
             const item = document.createElement('div');
             item.className = 'patient-item';
+            const safeName = escapeHtml(p.name);
+            const safeId = escapeHtml(p.id);
+            const initial = safeName ? safeName[0] : '?';
             item.innerHTML = `
-                <div class="patient-avatar">${p.name[0]}</div>
+                <div class="patient-avatar">${initial}</div>
                 <div class="patient-meta">
-                    <span class="patient-name">${p.name}</span>
-                    <span class="patient-id">ID: ${p.id}</span>
+                    <span class="patient-name">${safeName}</span>
+                    <span class="patient-id">ID: ${safeId}</span>
                 </div>
             `;
             item.addEventListener('click', () => {
@@ -1180,12 +1181,10 @@
             batVolData.push(rec.battery.voltage || null);
         });
 
-        // Determine Text Color based on theme
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const isSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDark = currentTheme === 'dark' || (!currentTheme && isSystemDark);
-        const textColor = isDark ? '#CBD5E1' : '#718096';
-        const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
+        // Reuse shared theme color helper
+        const tc = getThemeColors();
+        const textColor = tc.text;
+        const gridColor = tc.grid;
 
         chartInstance = new Chart(ctx, {
             type: 'line',
@@ -1223,13 +1222,7 @@
                     legend: {
                         labels: { color: textColor }
                     },
-                    tooltip: {
-                        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                        titleColor: isDark ? '#F8FAFC' : '#1E293B',
-                        bodyColor: isDark ? '#CBD5E1' : '#64748B',
-                        borderColor: isDark ? '#334155' : '#E2E8F0',
-                        borderWidth: 1
-                    }
+                    tooltip: makeTooltipConfig(tc)
                 },
                 scales: {
                     x: {
@@ -1373,11 +1366,11 @@
             html += '<th>姓名</th><th>登记号</th><th>品牌</th><th>型号</th><th>植入日期</th><th>程控次数</th>';
             html += '</tr></thead><tbody>';
             patients.forEach(p => {
-                html += `<tr data-file="${p.file_name || ''}">`;
-                html += `<td>${p.name || p['姓名'] || '--'}</td>`;
-                html += `<td class="mono" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary)">${p.id || p['登记号'] || '--'}</td>`;
-                html += `<td>${p.brand || '--'}</td>`;
-                html += `<td>${p.model || '--'}</td>`;
+                html += `<tr data-file="${escapeHtml(p.file_name || '')}">`;
+                html += `<td>${escapeHtml(p.name || p['姓名'] || '--')}</td>`;
+                html += `<td class="mono" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary)">${escapeHtml(p.id || p['登记号'] || '--')}</td>`;
+                html += `<td>${escapeHtml(p.brand || '--')}</td>`;
+                html += `<td>${escapeHtml(p.model || '--')}</td>`;
                 html += `<td>${formatDate(p.implant_date) || '--'}</td>`;
                 html += `<td>${p.count || 1}</td>`;
                 html += '</tr>';

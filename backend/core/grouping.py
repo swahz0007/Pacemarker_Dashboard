@@ -4,9 +4,12 @@
 """
 
 import json
+import logging
 from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from config import PATIENT_RECORDS_DIR
 from core.utils import extract_name_from_filename, parse_date
@@ -24,7 +27,7 @@ def is_valid_record(record: dict) -> bool:
     if header_name:
         filename_name = extract_name_from_filename(filename)
         if filename_name and filename_name not in header_name and header_name not in filename_name:
-            print(f"  [警告] 姓名不匹配但保留: 文件名='{filename_name}', header='{header_name}'")
+            logger.warning(f"姓名不匹配但保留: 文件名='{filename_name}', header='{header_name}'")
     
     return True
 
@@ -50,9 +53,9 @@ def group_by_registration_id(data: list) -> dict:
         
         grouped[reg_id].append(record)
     
-    print(f"过滤无效记录: {invalid_count}条")
+    logger.info(f"过滤无效记录: {invalid_count}条")
     if proxy_count > 0:
-        print(f"代理登记号: {proxy_count}条（原始登记号为空）")
+        logger.info(f"代理登记号: {proxy_count}条（原始登记号为空）")
     return grouped
 
 
@@ -71,11 +74,11 @@ def process_and_split_records(data: list):
     内存管道处理：分组 + 排序 + 拆分输出
     直接从提取的数据列表生成患者独立JSON文件
     """
-    print(f"总记录数: {len(data)}")
+    logger.info(f"总记录数: {len(data)}")
     
     # 按登记号分组
     grouped = group_by_registration_id(data)
-    print(f"唯一患者数（按登记号）: {len(grouped)}")
+    logger.info(f"唯一患者数（按登记号）: {len(grouped)}")
     
     # 创建输出目录
     PATIENT_RECORDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -105,7 +108,7 @@ def process_and_split_records(data: list):
         
         count += 1
         if count % 100 == 0:
-            print(f"已处理 {count}/{len(grouped)} 条记录...")
+            logger.info(f"已处理 {count}/{len(grouped)} 条记录...")
     
-    print(f"多次程控患者数: {multi_visit_count}")
-    print(f"已拆分 {count} 条患者记录至: {PATIENT_RECORDS_DIR}")
+    logger.info(f"多次程控患者数: {multi_visit_count}")
+    logger.info(f"已拆分 {count} 条患者记录至: {PATIENT_RECORDS_DIR}")

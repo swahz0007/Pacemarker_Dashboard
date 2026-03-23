@@ -3,10 +3,8 @@
 """
 
 import re
-import sys
 from pathlib import Path
 from datetime import datetime, timedelta
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import IGNORE_IN_KV
 
@@ -92,6 +90,6 @@ def excel_date_to_str(val):
         try:
             dt = datetime(1899, 12, 30) + timedelta(days=val)
             return dt.strftime('%Y年%m月%d日')
-        except:
+        except (ValueError, OverflowError):
             pass
     return None

@@ -137,7 +137,9 @@ def match_all_files():
     
     # 统计
     matched_count = sum(1 for r in file_records if "Match" in r["Status"])
-    print(f"匹配成功率: {matched_count}/{len(file_records)} ({matched_count/len(file_records)*100:.2f}%)")
+    total = len(file_records)
+    pct = f"{matched_count/total*100:.2f}" if total > 0 else "N/A"
+    print(f"匹配成功率: {matched_count}/{total} ({pct}%)")
     
     return file_records
 

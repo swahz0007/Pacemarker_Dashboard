@@ -16,7 +16,7 @@ def get_file_hash(filepath):
     hasher = hashlib.md5()
     with open(filepath, 'rb') as f:
         buf = f.read(65536)
-        while len(buf) > 0:
+        while buf:
             hasher.update(buf)
             buf = f.read(65536)
     return hasher.hexdigest()
