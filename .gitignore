@@ -40,3 +40,13 @@ patient_records/
 
 # 前端数据文件（包含敏感信息）
 dashboard_ui/data/
+
+# AI 工具配置
+.claude/
+.gemini/
+
+# 临时脚本
+tmp_*
+
+# 审计输出（含患者数据）
+doc/audit_result.json

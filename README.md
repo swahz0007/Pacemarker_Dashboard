@@ -1,115 +1,90 @@
 # Pacemaker Dashboard 🫀
 
-**基于 Web 的心脏起搏器程控随访数据可视化管理系统**
+**心脏起搏器程控报告数据提取、审计与可视化系统**
 
-> ⚠️ **当前状态**：项目已完成 **Phase 1 (后端数据清洗)** 和 **Phase 2 (可视化面板)** 阶段。前端面板已可正常使用，支持离线浏览。由于涉及患者隐私，**本仓库仅包含核心代码逻辑，不包含任何临床原始数据。**
+> ⚠️ 本仓库仅包含核心代码逻辑，**不包含任何临床原始数据**（患者隐私保护）。
 
-## 🎯 项目愿景
+## 项目简介
 
-在心电诊断科程控随访工作中，医生面临大量不同品牌（美敦力、雅培、波科等）和不同格式的程控报告。本项目旨在构建一个**统一的前端可视化面板**，将这些杂乱的非结构化数据转化为直观、标准化的视图，辅助医生进行：
+将心电诊断科数千份不同品牌（美敦力、雅培、波科、百多力、创领）的 Excel 程控报告，自动提取为标准化 JSON 结构，为后续回顾性分析、机器学习、深度学习研究提供高质量数据基础。
 
-1.  **快速查阅**：一目了然地查看关键参数（阈值、阻抗、电池寿命）。
-2.  **趋势分析**：追踪患者长期的参数变化（如电极阻抗趋势）。
-3.  **异常预警**：自动高亮显示超出正常范围的指标。
+## 核心指标
 
-## 🛠️ 已完成功能
+| 指标           | 数值                                             |
+| -------------- | ------------------------------------------------ |
+| 支持品牌       | 美敦力 / 雅培 / 波科 / 百多力 / 创领             |
+| 支持设备类型   | 起搏器 / ICD / CRT-D / CRT-P / EV-ICD / Micra AV |
+| 审计字段数     | 40,202                                           |
+| **提取准确率** | **100%**                                         |
+| 需修复问题     | 0                                                |
 
-### Phase 1: Backend ETL ✅
--   **多厂家支持**：适配美敦力、雅培、波科、百多力、创领等主流品牌。
--   **模板自适应**：自动识别 14+ 种不同的报告模板（起搏器/ICD/CRT-D/CRT-P）。
--   **智能提取**：基础参数、测试数据、事件记录、电池状态全覆盖。
--   **患者数据分离**：自动按登记号拆分，每位患者独立JSON文件。
-
-### Phase 2: Dashboard UI ✅
--   **现代化深色主题**：专为临床场景设计的高对比度 UI。
--   **总览面板**：一站式查看程控结论、下次随访、电池状态、起搏模式、关键事件、导线状态。
--   **趋势图表**：阈值与阻抗的历史变化曲线 (Chart.js)。
--   **程控历史**：严格按照 JSON 结构展示完整程控记录，支持折叠展开。
--   **智能日期处理**：自动转换 Excel 序列号为标准日期格式。
--   **离线运行**：无需服务器，双击 `index.html` 即可使用。
--   **中文界面**：全中文本地化，支持自定义字体 (LXGW WenKai)。
-
-## 💡 核心资产：数据中心 (Data Hub)
-
-ETL 管道的最终产物 `patient_records/` 目录是本项目的核心资产。它不仅仅是输出文件，更是连接后端数据清洗与前端可视化应用的关键桥梁。
-
-### 数据的应用潜力：
-
-1.  **Web Dashboard 的"单一信源"**：
-    -   前端应用直接读取 JSON 文件进行渲染，完全**与后端解耦**。
-    
-2.  **临床科研的"金矿"**：
-    -   将散落在数千份 Excel 中的非结构化数据变成了**可查询的结构化数据库**。
-    -   直接转换为 Pandas DataFrame，进行生存分析或相关性研究。
-
-3.  **AI 辅助系统的上下文 (Context)**：
-    -   清洗后的 JSON 移除了 Excel 中的格式噪音，可作为 RAG 系统的知识库。
-
-## 🗺️ 未来规划 (Roadmap)
-
-### Phase 3: 患者纵向管理 (Longitudinal View)
--   [ ] **趋势图表增强**：绘制阈值、阻抗、P/R波幅度的历史变化曲线。
--   [ ] **电池耗竭预测**：基于历史电压下降斜率，更精准地预测更换时间。
-
-### Phase 4: 统计与科研 (Analytics)
--   [ ] **科室概览**：统计科室管理的起搏器品牌分布、植入量统计。
--   [ ] **异常筛选**：一键筛选出所有"心房阻抗异常"或"发生过AF"的患者列表。
--   [ ] **科研导出**：支持将清洗后的数据批量导出为 CSV/Excel。
-
-### Phase 5: AI 辅助 (Intelligence)
--   [ ] **报告自动解读**：基于 LLM 生成通俗易懂的随访小结。
--   [ ] **风险预警**：识别潜在的参数设置冲突或非生理性数据。
-
-## 🏗️ 项目结构
+## 系统架构
 
 ```
 Pacemarker_Dashboard/
-├── backend/                # [后端] 数据处理引擎 (清洗 Excel -> JSON)
-│   ├── core/               # 提取逻辑与解析器
-│   ├── data/               # 模板定义 (JSON)
-│   └── main.py             # 程序主入口
-├── dashboard_ui/           # [前端] 可视化面板 (HTML/JS/CSS)
-│   ├── index.html          # 面板入口
-│   ├── assets/             # CSS/JS 资源
-│   ├── scripts/            # 前端数据打包脚本 (generate_data.py)
-│   └── data/               # 面板数据库 (data_bundle.js)
-├── patient_records/        # [产物] 标准化 JSON 病历库 - [Git Ignored 🔒]
-├── 01_data_repository/     # [输入] 原始 Excel 报告 - [Git Ignored 🔒]
-└── doc/                    # 开发文档
+├── backend/                    # 数据处理引擎
+│   ├── core/                   # 核心模块
+│   │   ├── handlers.py         #   Excel 文件处理器 (智能 Sheet 选择)
+│   │   ├── extractors.py       #   数据提取器 (KV/表格/事件/签名)
+│   │   ├── grouping.py         #   患者分组与纵向匹配
+│   │   ├── utils.py            #   工具函数
+│   │   └── file_tracker.py     #   文件索引
+│   ├── scripts/
+│   │   ├── audit_extraction.py #   自动化审计 → audit_result.json
+│   │   ├── extract_data.py     #   独立提取工具
+│   │   └── match_templates.py  #   模板匹配工具
+│   ├── data/templates.json     #   模板定义
+│   ├── config.py               #   全局配置
+│   └── main.py                 #   主入口 (模板匹配→提取→分组)
+├── dashboard_ui/               # 可视化面板
+│   ├── index.html              #   面板入口 (双击即用)
+│   ├── assets/                 #   CSS/JS 资源
+│   └── scripts/                #   数据打包脚本
+├── 01_data_repository/         # 原始 Excel 报告 [Git Ignored 🔒]
+├── patient_records/            # 标准化 JSON 病历库 [Git Ignored 🔒]
+└── doc/                        # 文档
 ```
 
-## 🔒 隐私与安全
+## 使用方法
 
-本项目严格遵循数据隐私原则：
-1.  **代码与数据分离**：所有临床原始数据（`01_data_repository/`）和提取结果（`patient_records/`）均已通过 `.gitignore` 排除，**绝不会**上传至 GitHub。
-2.  **本地化运行**：设计为本地部署工具，数据处理全流程在内网或本地电脑完成。
-
-## 🚀 使用指南
-
-### 1. 环境准备
+### 环境准备
 ```bash
 pip install openpyxl xlrd pandas
 ```
 
-### 2. 数据准备
-将医院导出的 Excel 格式程控报告放入 `01_data_repository` 文件夹（支持子文件夹结构）。
-
-### 3. 数据清洗 (生成标准文件)
-将 Excel 原始报告处理为结构化 JSON：
+### 完整流程
 ```bash
+# 1. 数据提取 (Excel → JSON)
 python backend/main.py
-```
 
-### 4. 仪表盘更新 (Dashboard Update)
-将清洗后的数据同步到前端面板：
-```bash
+# 2. 自动化审计 (验证提取准确性)
+python backend/scripts/audit_extraction.py
+
+# 3. 更新可视化面板
 python dashboard_ui/scripts/generate_data.py
+
+# 4. 查看面板
+# 双击 dashboard_ui/index.html
 ```
 
-### 5. 查看面板
-直接双击打开以下文件即可查看到最新的可视化页面：
-`dashboard_ui/index.html`
+### 审计输出
+`doc/audit_result.json` — 包含逐字段对比结果：
+- **MATCH**: 提取值与 Excel 原始值一致
+- **MISMATCH**: 值不一致（附根因分类）
+- **MISSING**: Excel 有值但提取为空
+- **NOT_FOUND**: 无法在 Excel 中定位验证
 
+## 技术特性
+
+- **智能 Sheet 选择**：根据文件名患者姓名自动匹配正确的 Sheet（解决雅培模板多 Sheet 残留问题）
+- **重提取审计**：表格/事件/签名区域使用提取脚本同一函数重新提取后逐键对比，保证审计一致性
+- **问题自动分类**：CROSS_SHEET / NAME_TYPO / ARROW_VALUE 等 8 类根因，区分系统 bug 与数据源问题
+- **全量覆盖**：header、设置参数、表格参数、测试阈值、事件记录、抗心动过速参数、签名日期
+
+## 隐私与安全
+
+- **代码与数据分离**：原始 Excel 和提取结果均通过 `.gitignore` 排除
+- **本地化运行**：全流程在本地完成，无外部数据传输
 
 ---
-*Developed with ❤️ for Electrophysiology.*
+*Developed for Electrophysiology Research.*
