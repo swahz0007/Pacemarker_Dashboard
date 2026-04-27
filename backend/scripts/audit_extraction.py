@@ -37,7 +37,7 @@ from config import (
     Z2_COL_HEADERS, Z2_ROW_HEADERS, Z3_COL_HEADERS, Z3_ROW_HEADERS,
 )
 from core.handlers import get_handler
-from core.utils import clean_value, clean_label
+from core.utils import clean_value
 from core.extractors import (
     extract_table_in_range, get_anchors,
     extract_events_flexible, extract_antitachy_table,

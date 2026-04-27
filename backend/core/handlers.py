@@ -10,11 +10,14 @@ Excel 文件处理器模块
 """
 
 import logging
-import xlrd
 import openpyxl
 from core.utils import extract_name_from_filename_legacy
 
 logger = logging.getLogger(__name__)
+try:
+    import xlrd
+except ImportError:  # pragma: no cover - depends on runtime environment
+    xlrd = None
 
 
 def _extract_name_from_path(filepath):
@@ -26,6 +29,8 @@ class XlsHandler:
     """处理旧版 .xls 格式文件"""
 
     def __init__(self, filepath):
+        if xlrd is None:
+            raise RuntimeError("xlrd is not installed; .xls files cannot be processed in this environment")
         self.book = xlrd.open_workbook(filepath, formatting_info=True)
         patient_name = _extract_name_from_path(filepath)
         self.sheet = self._select_best_sheet(patient_name)
@@ -141,3 +146,8 @@ def get_handler(filepath):
     if filepath.lower().endswith(".xls"):
         return XlsHandler(filepath)
     return XlsxHandler(filepath)
+
+
+def is_xls_supported():
+    """当前运行环境是否支持 .xls 读取"""
+    return xlrd is not None

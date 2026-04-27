@@ -7,7 +7,6 @@ import json
 import logging
 from datetime import datetime
 from collections import defaultdict
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +18,12 @@ def is_valid_record(record: dict) -> bool:
     """校验记录有效性：仅检查关键字段是否存在（不再过滤姓名不匹配的记录）"""
     filename = record.get("meta", {}).get("filename", "")
     header_name = record.get("header", {}).get("姓名", "")
+    extract_error = record.get("meta", {}).get("error", "")
     
     if not filename:
+        return False
+    if extract_error:
+        logger.warning(f"提取失败记录已过滤: {filename} - {extract_error}")
         return False
     
     # 姓名不匹配时仅警告，不过滤

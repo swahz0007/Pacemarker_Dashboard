@@ -66,16 +66,21 @@ def generate_charts():
     # Chart 1: Brand Distribution (Horizontal Bar Chart to avoid text overlap)
     brand_counts = Counter(brands)
     sorted_brands = brand_counts.most_common(5)
-    labels = [b[0] for b in sorted_brands]
-    sizes = [b[1] for b in sorted_brands]
+    if sorted_brands:
+        labels = [b[0] for b in sorted_brands]
+        sizes = [b[1] for b in sorted_brands]
+    else:
+        labels = ['无数据']
+        sizes = [0]
     
     fig, ax = plt.subplots(figsize=(10, 5))
     sns.barplot(x=sizes, y=labels, ax=ax, palette='viridis', hue=labels, legend=False)
     ax.set_title('各品牌设备结构化入库数据分布', fontsize=16, weight='bold', pad=20)
     ax.set_xlabel('设备量 (台)', fontsize=14)
     # Add data labels
+    brand_offset = max(sizes) * 0.01 if sizes else 0
     for i, v in enumerate(sizes):
-        ax.text(v + max(sizes)*0.01, i, f" {v}", color='black', va='center', fontweight='bold', fontsize=12)
+        ax.text(v + brand_offset, i, f" {v}", color='black', va='center', fontweight='bold', fontsize=12)
     plt.tight_layout()
     brand_chart_path = DOC_DIR / 'brand_distribution.png'
     plt.savefig(brand_chart_path)
@@ -84,15 +89,20 @@ def generate_charts():
     # Chart 2: Top 10 Models
     model_counts = Counter(models)
     top_models = model_counts.most_common(10)
-    m_labels = [m[0] for m in top_models]
-    m_sizes = [m[1] for m in top_models]
+    if top_models:
+        m_labels = [m[0] for m in top_models]
+        m_sizes = [m[1] for m in top_models]
+    else:
+        m_labels = ['无数据']
+        m_sizes = [0]
     
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.barplot(x=m_sizes, y=m_labels, ax=ax, palette='rocket', hue=m_labels, legend=False)
     ax.set_title('Top 10 解析入库的起搏器型号清单', fontsize=16, weight='bold', pad=20)
     ax.set_xlabel('设备量 (台)', fontsize=14)
+    model_offset = max(m_sizes) * 0.01 if m_sizes else 0
     for i, v in enumerate(m_sizes):
-        ax.text(v + max(m_sizes)*0.01, i, f" {v}", color='black', va='center', fontweight='bold', fontsize=11)
+        ax.text(v + model_offset, i, f" {v}", color='black', va='center', fontweight='bold', fontsize=11)
     plt.tight_layout()
     model_chart_path = DOC_DIR / 'top_models.png'
     plt.savefig(model_chart_path)
@@ -102,6 +112,9 @@ def generate_charts():
     year_counts = Counter(implant_years)
     years = sorted(year_counts.keys())
     counts = [year_counts[y] for y in years]
+    if not years:
+        years = ['无数据']
+        counts = [0]
     
     fig, ax = plt.subplots(figsize=(12, 5))
     sns.barplot(x=years, y=counts, ax=ax, color='skyblue', alpha=0.8)
@@ -112,8 +125,9 @@ def generate_charts():
     plt.xticks(rotation=45, ha='right')
     ax.grid(axis='y', linestyle='--', alpha=0.5)
     
+    year_offset = max(counts) * 0.02 if counts else 0
     for i, count in enumerate(counts):
-        ax.text(i, count + max(counts)*0.02, str(count), ha='center', va='bottom', fontsize=9)
+        ax.text(i, count + year_offset, str(count), ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
     trend_chart_path = DOC_DIR / 'implant_trends.png'

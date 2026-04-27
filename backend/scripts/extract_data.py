@@ -6,6 +6,7 @@
 import csv
 import warnings
 import sys
+from collections import Counter
 from pathlib import Path
 
 # 添加 backend 目录到路径
@@ -14,6 +15,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 from config import MATCHING_REPORT_FILE
 from core.extractors import process_file
+from core.handlers import is_xls_supported
 
 
 def extract_all_data():
@@ -36,13 +38,39 @@ def extract_all_data():
     print(f"开始全量提取，共 {len(files)} 个文件...")
     
     json_output = []
+    xls_supported = is_xls_supported()
+    skipped_unsupported = []
+    failed_records = []
     for i, file in enumerate(files):
         if (i + 1) % 50 == 0:
             print(f"已处理 {i + 1}/{len(files)}...")
-        json_output.append(process_file(file["Full Path"], file["Filename"]))
+        filename = file["Filename"]
+        if filename.lower().endswith(".xls") and not xls_supported:
+            skipped_unsupported.append(filename)
+            continue
+        record = process_file(file["Full Path"], file["Filename"])
+        if "error" in record.get("meta", {}):
+            failed_records.append({
+                "filename": filename,
+                "error": record.get("meta", {}).get("error", "unknown error")
+            })
+            continue
+        json_output.append(record)
 
-    error_count = sum(1 for r in json_output if "error" in r.get("meta", {}))
-    print(f"数据提取完成，共 {len(json_output)} 条记录（成功 {len(json_output) - error_count}, 失败 {error_count}）。")
+    error_count = len(failed_records)
+    skipped_count = len(skipped_unsupported)
+    print(
+        f"数据提取完成，共 {len(files)} 个文件（成功 {len(json_output)}, "
+        f"失败 {error_count}, 环境受限跳过 {skipped_count}）。"
+    )
+    if skipped_count:
+        print("环境受限跳过主因: 当前环境缺少 xlrd，无法处理 .xls 文件。")
+    if error_count:
+        reason_counter = Counter(item.get("error", "unknown error") for item in failed_records)
+        top_reason, top_count = reason_counter.most_common(1)[0]
+        print(f"失败主因: {top_reason} ({top_count} 条)")
+        if "xlrd is not installed" in top_reason:
+            print("提示: 当前环境缺少 xlrd，.xls 文件将被跳过；安装 xlrd 后可恢复 .xls 提取能力。")
     return json_output
 
 

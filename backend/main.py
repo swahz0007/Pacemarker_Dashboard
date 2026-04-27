@@ -27,11 +27,12 @@ if str(BACKEND_DIR) not in sys.path:
 
 from scripts.match_templates import match_all_files, find_best_template, load_templates
 from scripts.extract_data import extract_all_data
-from core.grouping import process_and_split_records
+from core.grouping import process_and_split_records, sort_by_date
 from core.extractors import process_file
+from core.handlers import is_xls_supported
 from core.file_tracker import (
     build_file_index, find_new_or_modified_files,
-    load_processed_files, save_processed_files, get_file_hash
+    load_processed_files, save_processed_files
 )
 from config import TEMPLATES_FILE, PATIENT_RECORDS_DIR, DATA_REPOSITORY
 
@@ -83,8 +84,14 @@ def incremental_update():
     processed = load_processed_files()
     change_list = new_files + modified_files
 
+    xls_supported = is_xls_supported()
+    skipped_unsupported = 0
     for rel_path, filename, file_hash in change_list:
         full_path = str(DATA_REPOSITORY.parent / rel_path)
+        if filename.lower().endswith(".xls") and not xls_supported:
+            logger.warning(f"环境受限跳过 .xls 文件（缺少 xlrd）: {filename}")
+            skipped_unsupported += 1
+            continue
         matched_template, brand, dtype = find_best_template(filename, templates)
 
         if not matched_template and "Match" not in (brand or ""):
@@ -102,7 +109,10 @@ def incremental_update():
             logger.warning(f"提取失败: {filename} - {record['meta'].get('error')}")
 
     if not extracted:
-        logger.info("没有成功提取的记录。")
+        if skipped_unsupported:
+            logger.info(f"没有成功提取的记录（环境受限跳过 .xls: {skipped_unsupported}）。")
+        else:
+            logger.info("没有成功提取的记录。")
         return
 
     logger.info(f"成功提取 {len(extracted)} 条记录，开始增量合并...")
@@ -128,11 +138,26 @@ def incremental_update():
 
         if file_path.exists():
             # 合并到已有文件
-            with open(file_path, 'r', encoding='utf-8') as f:
-                existing = json.load(f)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"患者记录文件损坏，已按空记录修复并继续: {file_path} - {e}")
+                existing = {
+                    "登记号": reg_id,
+                    "姓名": new_records[0].get("header", {}).get("姓名", "未知"),
+                    "程控次数": 0,
+                    "程控记录": []
+                }
+
+            if not isinstance(existing.get("程控记录"), list):
+                logger.warning(f"患者记录结构异常，已重置程控记录列表: {file_path}")
+                existing["程控记录"] = []
 
             existing_files = {
-                r.get("meta", {}).get("filename") for r in existing.get("程控记录", [])
+                r.get("meta", {}).get("filename")
+                for r in existing.get("程控记录", [])
+                if isinstance(r, dict)
             }
 
             for nr in new_records:
@@ -145,16 +170,18 @@ def incremental_update():
                     ]
                 existing["程控记录"].append(nr)
 
+            existing["程控记录"] = sort_by_date(existing["程控记录"])
             existing["程控次数"] = len(existing["程控记录"])
             merged_count += 1
         else:
             # 创建新文件
             name = new_records[0].get("header", {}).get("姓名", "未知")
+            sorted_new_records = sort_by_date(new_records)
             existing = {
                 "登记号": reg_id,
                 "姓名": name,
-                "程控次数": len(new_records),
-                "程控记录": new_records
+                "程控次数": len(sorted_new_records),
+                "程控记录": sorted_new_records
             }
             created_count += 1
 
