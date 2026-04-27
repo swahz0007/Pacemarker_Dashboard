@@ -3,10 +3,13 @@
 """
 
 import re
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 
 from config import IGNORE_IN_KV
+
+logger = logging.getLogger(__name__)
 
 
 def clean_value(val):
@@ -42,6 +45,13 @@ NAME_SUFFIXES = [
     "Vitatron", " ", "(", "（", ")", "）", "-", "_"
 ]
 
+# 历史行为兼容：保留 handlers 中旧版姓名清洗策略（避免改动 sheet 匹配）
+NAME_SUFFIXES_LEGACY = [
+    "起搏器报告单", "CRT-P报告单", "CRT-D报告单", "ICD报告单",
+    "（美敦力）", "（百多力）", "（波科）", "(雅培)",
+    "（美敦力Micra AV）", "（雅培）", " ", "-", "无医嘱MRI后", "无医嘱", "Micra AV"
+]
+
 
 def extract_name_from_filename(filename: str) -> str:
     """从文件名中提取患者姓名"""
@@ -54,6 +64,14 @@ def extract_name_from_filename(filename: str) -> str:
     name = re.sub(r'\s*（\d+）\s*$', '', name)
 
     return name.strip()
+
+
+def extract_name_from_filename_legacy(filename: str) -> str:
+    """保留历史逻辑：兼容已有 handlers 的旧版姓名解析方式"""
+    basename = re.sub(r"\d{6,}", "", Path(filename).stem)
+    for suffix in NAME_SUFFIXES_LEGACY:
+        basename = basename.replace(suffix, "")
+    return basename.strip()
 
 
 # 日期解析格式（供 parse_date 使用）
@@ -91,5 +109,5 @@ def excel_date_to_str(val):
             dt = datetime(1899, 12, 30) + timedelta(days=val)
             return dt.strftime('%Y年%m月%d日')
         except (ValueError, OverflowError):
-            pass
+            logger.debug("excel_date_to_str failed for value=%s", val, exc_info=True)
     return None

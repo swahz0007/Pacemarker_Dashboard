@@ -29,7 +29,8 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 BACKEND_DIR = SCRIPT_DIR.parent
-sys.path.insert(0, str(BACKEND_DIR))
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from config import (
     PATIENT_RECORDS_DIR, DATA_REPOSITORY,
@@ -57,8 +58,15 @@ AUDIT_JSON = DOC_DIR / "audit_result.json"
 
 def read_extracted_json(filepath):
     """读取患者 JSON，返回 {source_filename: record_data} 映射"""
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error("读取患者JSON失败，已跳过: %s", str(filepath), extra={"file": str(filepath), "error": str(e)})
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("患者JSON结构异常，已跳过: %s", str(filepath))
+        return {}
     result = {}
     for record in data.get("程控记录", []):
         meta = record.get("meta", {})
@@ -84,8 +92,10 @@ def _values_match(a, b):
         if abs(float(a) - float(b)) < 0.01:
             return True
     except (ValueError, TypeError):
-        pass
-    return a.replace(" ", "").replace("　", "").lower() == b.replace(" ", "").replace("　", "").lower()
+        logger.debug("value-match numeric conversion failed", extra={"expected": a, "extracted": b})
+    a_text = str(a).replace(" ", "").replace("　", "").lower()
+    b_text = str(b).replace(" ", "").replace("　", "").lower()
+    return a_text == b_text
 
 
 def _find_in_excel(handler, key, expected_value):
@@ -125,136 +135,143 @@ def audit_single_record(source_path, extracted_record):
     """
     fields = []
     filename = os.path.basename(source_path)
-
+    handler = None
     try:
         handler = get_handler(source_path)
     except Exception as e:
         return [{"section": "ERROR", "key": "OPEN_FILE", "excel_val": "", "extracted_val": "", "status": "ERROR", "detail": str(e)}]
 
-    raw_record = extracted_record.get("raw_record", {})
-    anchors = get_anchors(handler)
+    try:
+        raw_record = extracted_record.get("raw_record", {})
+        anchors = get_anchors(handler)
 
-    def add_field(section, key, excel_val, extracted_val):
-        ev = str(excel_val).strip() if excel_val else ""
-        xv = str(extracted_val).strip() if extracted_val else ""
-        if ev == "__NOT_FOUND__":
-            status = "NOT_FOUND"
-            ev = ""
-        elif not ev and not xv:
-            status = "BOTH_EMPTY"
-        elif not ev and xv:
-            status = "PHANTOM"
-        elif ev and not xv:
-            status = "MISSING"
-        elif _values_match(ev, xv):
-            status = "MATCH"
-        else:
-            status = "MISMATCH"
-        # 过滤无意义字段：双方都没有数据的不纳入统计
-        if status == "BOTH_EMPTY":
-            return
-        if status == "NOT_FOUND" and not xv:
-            return  # Excel 找不到 + 系统也没提取到 = 该字段不存在（如左心室在双腔起搏器中）
-        fields.append({"section": section, "key": key, "excel_val": ev, "extracted_val": xv, "status": status})
-
-    # 1. Header
-    header = raw_record.get("header", {})
-    for key, val in header.items():
-        add_field("header", key, _find_in_excel(handler, key, val), val)
-
-    # 2. Basic Params - Settings (KV)
-    settings = raw_record.get("basic_params", {}).get("settings", {})
-    for key, val in settings.items():
-        add_field("settings", key, _find_in_excel(handler, key, val), val)
-
-    # 3. Basic Params - Measurements (表格重提取)
-    measurements = raw_record.get("basic_params", {}).get("measurements", {})
-    if measurements:
-        basic_start = (anchors.get("basic") or 0) + 1
-        basic_end = anchors.get("antitachy") or anchors.get("test") or handler.nrows
-        re_z2 = extract_table_in_range(handler, basic_start, basic_end, Z2_COL_HEADERS, Z2_ROW_HEADERS)
-        for key, val in measurements.items():
-            re_val = re_z2.get(key, "__NOT_FOUND__")
-            add_field("measurements", key, re_val or "__NOT_FOUND__", val)
-
-    # 4. Test Params - Battery (KV)
-    battery = raw_record.get("test_params", {}).get("battery_and_leads", {})
-    for key, val in battery.items():
-        add_field("battery", key, _find_in_excel(handler, key, val), val)
-
-    # 5. Test Params - Thresholds (表格重提取)
-    thresholds = raw_record.get("test_params", {}).get("threshold_tests", {})
-    if thresholds:
-        test_start = (anchors.get("test") or 0) + 1
-        test_end = anchors.get("event") or handler.nrows
-        re_z3 = extract_table_in_range(handler, test_start, test_end, Z3_COL_HEADERS, Z3_ROW_HEADERS)
-        for key, val in thresholds.items():
-            re_val = re_z3.get(key, "__NOT_FOUND__")
-            add_field("thresholds", key, re_val or "__NOT_FOUND__", val)
-
-    # 6. Events (重提取)
-    events = raw_record.get("events_and_footer", {})
-    if events:
-        event_start = anchors.get("event") or 0
-        re_events = extract_events_flexible(handler, event_start, handler.nrows)
-        for key, val in events.items():
-            re_val = re_events.get(key)
-            if re_val is not None:
-                excel_val = re_val or "__NOT_FOUND__"
+        def add_field(section, key, excel_val, extracted_val):
+            ev = str(excel_val).strip() if excel_val else ""
+            xv = str(extracted_val).strip() if extracted_val else ""
+            if ev == "__NOT_FOUND__":
+                status = "NOT_FOUND"
+                ev = ""
+            elif not ev and not xv:
+                status = "BOTH_EMPTY"
+            elif not ev and xv:
+                status = "PHANTOM"
+            elif ev and not xv:
+                status = "MISSING"
+            elif _values_match(ev, xv):
+                status = "MATCH"
             else:
-                excel_val = _find_in_excel(handler, key, val)
-            add_field("events", key, excel_val, val)
+                status = "MISMATCH"
+            # 过滤无意义字段：双方都没有数据的不纳入统计
+            if status == "BOTH_EMPTY":
+                return
+            if status == "NOT_FOUND" and not xv:
+                return  # Excel 找不到 + 系统也没提取到 = 该字段不存在（如左心室在双腔起搏器中）
+            fields.append({"section": section, "key": key, "excel_val": ev, "extracted_val": xv, "status": status})
 
-    # 7. Footer Meta (重提取)
-    footer = raw_record.get("footer_meta", {})
-    if footer:
-        # 用与提取脚本相同的逻辑重新提取签名和日期
-        event_start = anchors.get("event") or 0
-        _, conc_row = extract_kv_in_range(handler, event_start, handler.nrows)
-        if conc_row is not None:
-            re_sig, re_date = extract_footer_info(handler, conc_row)
-        else:
-            re_sig, re_date = extract_footer_info(handler, event_start)
-        re_footer = {"签名行内容": re_sig, "程控日期": re_date}
-        for key, val in footer.items():
-            if val:
-                re_val = re_footer.get(key, "__NOT_FOUND__")
-                add_field("footer", key, re_val or "__NOT_FOUND__", val)
+        # 1. Header
+        header = raw_record.get("header", {})
+        for key, val in header.items():
+            add_field("header", key, _find_in_excel(handler, key, val), val)
 
-    # 8. Antitachy (重提取)
-    antitachy = raw_record.get("antitachy_params", {})
-    if antitachy:
-        at_start = (anchors.get("antitachy") or 0) + 1
-        at_end = anchors.get("test") or handler.nrows
-        re_at = extract_antitachy_table(handler, at_start, at_end)
-        flat_at = {}
-        for rk, cols in re_at.items():
-            if isinstance(cols, dict):
-                for ck, cv in cols.items():
-                    flat_at[f"{rk}_{ck}"] = cv
-                    flat_at[f"{rk}.{ck}"] = cv
-            else:
-                flat_at[rk] = cols
-        for key, val in antitachy.items():
-            if isinstance(val, dict):
-                for k2, v2 in val.items():
-                    composite = f"{key}.{k2}"
-                    re_val = flat_at.get(composite) or flat_at.get(f"{key}_{k2}")
-                    if re_val is not None:
-                        excel_val = re_val or "__NOT_FOUND__"
-                    else:
-                        excel_val = _find_in_excel(handler, k2, v2)
-                    add_field("antitachy", composite, excel_val, v2)
-            else:
-                re_val = flat_at.get(key)
+        # 2. Basic Params - Settings (KV)
+        settings = raw_record.get("basic_params", {}).get("settings", {})
+        for key, val in settings.items():
+            add_field("settings", key, _find_in_excel(handler, key, val), val)
+
+        # 3. Basic Params - Measurements (表格重提取)
+        measurements = raw_record.get("basic_params", {}).get("measurements", {})
+        if measurements:
+            basic_start = (anchors.get("basic") or 0) + 1
+            basic_end = anchors.get("antitachy") or anchors.get("test") or handler.nrows
+            re_z2 = extract_table_in_range(handler, basic_start, basic_end, Z2_COL_HEADERS, Z2_ROW_HEADERS)
+            for key, val in measurements.items():
+                re_val = re_z2.get(key, "__NOT_FOUND__")
+                add_field("measurements", key, re_val or "__NOT_FOUND__", val)
+
+        # 4. Test Params - Battery (KV)
+        battery = raw_record.get("test_params", {}).get("battery_and_leads", {})
+        for key, val in battery.items():
+            add_field("battery", key, _find_in_excel(handler, key, val), val)
+
+        # 5. Test Params - Thresholds (表格重提取)
+        thresholds = raw_record.get("test_params", {}).get("threshold_tests", {})
+        if thresholds:
+            test_start = (anchors.get("test") or 0) + 1
+            test_end = anchors.get("event") or handler.nrows
+            re_z3 = extract_table_in_range(handler, test_start, test_end, Z3_COL_HEADERS, Z3_ROW_HEADERS)
+            for key, val in thresholds.items():
+                re_val = re_z3.get(key, "__NOT_FOUND__")
+                add_field("thresholds", key, re_val or "__NOT_FOUND__", val)
+
+        # 6. Events (重提取)
+        events = raw_record.get("events_and_footer", {})
+        if events:
+            event_start = anchors.get("event") or 0
+            re_events = extract_events_flexible(handler, event_start, handler.nrows)
+            for key, val in events.items():
+                re_val = re_events.get(key)
                 if re_val is not None:
                     excel_val = re_val or "__NOT_FOUND__"
                 else:
                     excel_val = _find_in_excel(handler, key, val)
-                add_field("antitachy", key, excel_val, val)
+                add_field("events", key, excel_val, val)
 
-    if hasattr(handler, 'close'):
-        handler.close()
+        # 7. Footer Meta (重提取)
+        footer = raw_record.get("footer_meta", {})
+        if footer:
+            # 用与提取脚本相同的逻辑重新提取签名和日期
+            event_start = anchors.get("event") or 0
+            _, conc_row = extract_kv_in_range(handler, event_start, handler.nrows)
+            if conc_row is not None:
+                re_sig, re_date = extract_footer_info(handler, conc_row)
+            else:
+                re_sig, re_date = extract_footer_info(handler, event_start)
+            re_footer = {"签名行内容": re_sig, "程控日期": re_date}
+            for key, val in footer.items():
+                if val:
+                    re_val = re_footer.get(key, "__NOT_FOUND__")
+                    add_field("footer", key, re_val or "__NOT_FOUND__", val)
+
+        # 8. Antitachy (重提取)
+        antitachy = raw_record.get("antitachy_params", {})
+        if antitachy:
+            at_start = (anchors.get("antitachy") or 0) + 1
+            at_end = anchors.get("test") or handler.nrows
+            re_at = extract_antitachy_table(handler, at_start, at_end)
+            flat_at = {}
+            for rk, cols in re_at.items():
+                if isinstance(cols, dict):
+                    for ck, cv in cols.items():
+                        flat_at[f"{rk}_{ck}"] = cv
+                        flat_at[f"{rk}.{ck}"] = cv
+                else:
+                    flat_at[rk] = cols
+            for key, val in antitachy.items():
+                if isinstance(val, dict):
+                    for k2, v2 in val.items():
+                        composite = f"{key}.{k2}"
+                        re_val = flat_at.get(composite) or flat_at.get(f"{key}_{k2}")
+                        if re_val is not None:
+                            excel_val = re_val or "__NOT_FOUND__"
+                        else:
+                            excel_val = _find_in_excel(handler, k2, v2)
+                        add_field("antitachy", composite, excel_val, v2)
+                else:
+                    re_val = flat_at.get(key)
+                    if re_val is not None:
+                        excel_val = re_val or "__NOT_FOUND__"
+                    else:
+                        excel_val = _find_in_excel(handler, key, val)
+                    add_field("antitachy", key, excel_val, val)
+    except Exception:
+        raise
+    # end audit
+    finally:
+        if handler is not None and hasattr(handler, 'close'):
+            try:
+                handler.close()
+            except Exception as e:
+                logger.warning("关闭 handler 失败", extra={"file": filename, "error": str(e)})
 
     return fields
 
@@ -279,8 +296,9 @@ def build_record_maps():
             if len(filenames) > 1:
                 for fn in filenames:
                     multi_patient_files.add(fn)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("build_record_maps: skip file due parse error", extra={"file": str(pf)})
+            logger.debug("build_record_maps exception", exc_info=True, extra={"file": str(pf), "error": str(e)})
     return filename_record_count, multi_patient_files
 
 
@@ -311,7 +329,7 @@ def classify_issue(field, filename, fn_count, multi_files):
         if abs(float(ev) - float(xv)) / max(abs(float(ev)), 0.01) < 0.05:
             return "NUMERIC_NOISE"
     except (ValueError, TypeError):
-        pass
+        logger.debug("Numeric tolerance check skipped", extra={"ev": ev, "xv": xv})
     return "TRUE_MISMATCH"
 
 

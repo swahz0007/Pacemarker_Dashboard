@@ -65,10 +65,14 @@
 
     function parseToTimestamp(dateInput) {
         if (!dateInput) return 0;
-        if (/^\d{5}$/.test(dateInput)) {
-            return new Date((dateInput - 25569) * 86400 * 1000).getTime();
+        const txt = String(dateInput).trim();
+        if (/^\d{1,6}(\.\d+)?$/.test(txt)) {
+            const serial = Number(txt);
+            if (Number.isFinite(serial) && serial > 25500 && serial < 60000) {
+                return new Date((serial - 25569) * 86400 * 1000).getTime();
+            }
         }
-        const str = String(dateInput).replace(/\./g, '-').replace(/年|月/g, '-').replace(/日|号/g, '');
+        const str = txt.replace(/\./g, '-').replace(/年|月/g, '-').replace(/日|号/g, '');
         const ts = Date.parse(str);
         return isNaN(ts) ? 0 : ts;
     }
@@ -182,10 +186,12 @@
             if (v === null || v === undefined || v === '' || v === '/') return '';
 
             let displayVal = v;
+            let valueHtml = '';
             if (k.includes('日期') || k.includes('时间')) {
                 displayVal = formatDate(v);
+                valueHtml = escapeHtml(displayVal);
             } else if (typeof v === 'object') {
-                displayVal = `<pre style="margin:0; font-size:0.75rem">${JSON.stringify(v, null, 2)}</pre>`;
+                valueHtml = `<pre style="margin:0; font-size:0.75rem">${escapeHtml(JSON.stringify(v, null, 2))}</pre>`;
             } else {
                 // Extract unit from the key (e.g. "电池电压（V）" -> "V")
                 const unitMatch = k.match(/（(.*?)）|\((.*?)\)/);
@@ -204,12 +210,16 @@
                 }
 
                 if (unit && !isNaN(parseFloat(v)) && v !== 'OFF' && v !== 'ON' && v !== '依赖') {
-                    displayVal = `${v} <span style="font-size:0.8em; color:var(--text-muted)">${unit}</span>`;
+                    const safeUnit = escapeHtml(unit);
+                    const safeValue = escapeHtml(v);
+                    valueHtml = `${safeValue} <span style="font-size:0.8em; color:var(--text-muted)">${safeUnit}</span>`;
+                } else {
+                    valueHtml = escapeHtml(displayVal);
                 }
             }
 
             const label = k.replace(/（.*?）|\(.*?\)/g, '').replace(/_/g, ' ').replace('电池预估寿命', '预估寿命');
-            return `<div class="kv-row ${extraClass}"><span class="kv-key">${label}</span><span class="kv-val">${displayVal}</span></div>`;
+            return `<div class="kv-row ${escapeHtml(extraClass)}"><span class="kv-key">${escapeHtml(label)}</span><span class="kv-val">${valueHtml}</span></div>`;
         }).join('');
     }
 
@@ -259,7 +269,7 @@
             renderList(allPatients);
         } catch (err) {
             console.error(err);
-            dom.list.innerHTML = `<div class="error" style="padding:20px; color:var(--accent-rose)">Error loading data.<br>Make sure data_bundle.js exists.<br>${err.message}</div>`;
+            dom.list.innerHTML = `<div class="error" style="padding:20px; color:var(--accent-rose)">Error loading data.<br>Make sure data_bundle.js exists.<br>${escapeHtml(err.message || '')}</div>`;
         }
     }
 
@@ -1087,13 +1097,18 @@
         chambers.forEach(c => {
             const hasData = (c.imp && c.imp !== '--') || (c.sens && c.sens !== '--') || (c.thr && c.thr !== '--') || (c.out && c.out !== '--');
             if (hasData) {
+                const safeName = escapeHtml(c.name);
+                const safeImp = escapeHtml(c.imp || '--');
+                const safeSens = escapeHtml(c.sens || '--');
+                const safeThr = escapeHtml(c.thr || '--');
+                const safeOut = escapeHtml(c.out || '--');
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${c.name}</td>
-                    <td>${c.imp || '--'}</td>
-                    <td>${c.sens || '--'}</td>
-                    <td>${c.thr || '--'}</td>
-                    <td>${c.out || '--'}</td>
+                    <td>${safeName}</td>
+                    <td>${safeImp}</td>
+                    <td>${safeSens}</td>
+                    <td>${safeThr}</td>
+                    <td>${safeOut}</td>
                 `;
                 leadFragment.appendChild(tr);
             }
@@ -1108,15 +1123,18 @@
             const div = document.createElement('div');
             div.className = 'history-card';
             const collapseId = `rec-${index}`;
+            const safeDate = escapeHtml(rec.dateStr);
+            const safeMode = escapeHtml(rec.mode || '');
+            const safeVoltage = rec.battery.voltage ? escapeHtml(String(rec.battery.voltage)) : '';
 
             div.innerHTML = `
-                <div class="history-header" onclick="toggleHistory('${collapseId}')">
+                <div class="history-header" data-toggle="${collapseId}">
                     <div class="history-main-meta">
-                        <span class="history-date">程控日期: ${rec.dateStr}</span>
-                        <span class="badge mode-badge">${rec.mode}</span>
+                        <span class="history-date">程控日期: ${safeDate}</span>
+                        <span class="badge mode-badge">${safeMode}</span>
                     </div>
                     <div class="history-sub-meta">
-                        <span>${rec.battery.voltage ? '电池: ' + rec.battery.voltage + 'V' : ''}</span>
+                        <span>${safeVoltage ? '电池: ' + safeVoltage + 'V' : ''}</span>
                         <span class="arrow-icon">▼</span>
                     </div>
                 </div>
@@ -1151,6 +1169,10 @@
                     </div>
                 </div>
             `;
+            const header = div.querySelector(`[data-toggle="${collapseId}"]`);
+            if (header) {
+                header.addEventListener('click', () => toggleHistory(collapseId));
+            }
             timelineFragment.appendChild(div);
         });
         dom.recordTimeline.appendChild(timelineFragment);
@@ -1371,7 +1393,7 @@
                 html += `<td class="mono" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary)">${escapeHtml(p.id || p['登记号'] || '--')}</td>`;
                 html += `<td>${escapeHtml(p.brand || '--')}</td>`;
                 html += `<td>${escapeHtml(p.model || '--')}</td>`;
-                html += `<td>${formatDate(p.implant_date) || '--'}</td>`;
+                html += `<td>${escapeHtml(formatDate(p.implant_date) || '--')}</td>`;
                 html += `<td>${p.count || 1}</td>`;
                 html += '</tr>';
             });

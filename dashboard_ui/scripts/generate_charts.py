@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from collections import Counter
 import seaborn as sns
-import numpy as np
+import logging
 
 # Set Matplotlib parameters for high-quality scientific figures
 plt.rcParams['font.sans-serif'] = ['SimHei']  # Chinese font support
@@ -16,6 +16,7 @@ plt.rcParams['savefig.dpi'] = 300
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 PATIENT_RECORDS_DIR = BASE_DIR / 'patient_records'
 DOC_DIR = BASE_DIR / 'doc'
+logger = logging.getLogger(__name__)
 
 if not DOC_DIR.exists():
     DOC_DIR.mkdir(parents=True)
@@ -60,7 +61,7 @@ def generate_charts():
                     followup_counts.append(count)
                     
         except Exception as e:
-            pass
+            logger.warning("Skip invalid patient file", extra={"file": file_path, "error": str(e)})
 
     # Chart 1: Brand Distribution (Horizontal Bar Chart to avoid text overlap)
     brand_counts = Counter(brands)

@@ -21,7 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 确保导入路径正确
-sys.path.insert(0, str(Path(__file__).parent))
+BACKEND_DIR = Path(__file__).resolve().parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from scripts.match_templates import match_all_files, find_best_template, load_templates
 from scripts.extract_data import extract_all_data
@@ -106,7 +108,6 @@ def incremental_update():
     logger.info(f"成功提取 {len(extracted)} 条记录，开始增量合并...")
 
     # 增量合并：读取现有患者 JSON，追加/替换记录
-    from core.utils import extract_name_from_filename, parse_date
     from collections import defaultdict
 
     # 按登记号分组新记录

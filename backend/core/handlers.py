@@ -10,26 +10,16 @@ Excel 文件处理器模块
 """
 
 import logging
-import os
 import xlrd
 import openpyxl
+from core.utils import extract_name_from_filename_legacy
 
 logger = logging.getLogger(__name__)
 
 
 def _extract_name_from_path(filepath):
     """从文件路径提取患者姓名（轻量版，避免循环导入）"""
-    import re
-    basename = os.path.splitext(os.path.basename(filepath))[0]
-    # 去掉登记号（纯数字前缀或后缀）
-    basename = re.sub(r'\d{6,}', '', basename)
-    # 去掉常见后缀
-    for suffix in ['起搏器报告单', 'CRT-P报告单', 'CRT-D报告单', 'ICD报告单',
-                    '（美敦力）', '（百多力）', '（波科）', '(雅培)',
-                    '（美敦力Micra AV）', '（雅培）', ' ', '-', '无医嘱MRI后',
-                    '无医嘱', 'Micra AV']:
-        basename = basename.replace(suffix, '')
-    return basename.strip()
+    return extract_name_from_filename_legacy(filepath)
 
 
 class XlsHandler:
@@ -78,6 +68,15 @@ class XlsHandler:
         except Exception as e:
             logger.warning(f"检查蓝色单元格失败 ({r},{c}): {e}")
             return False
+
+    def close(self):
+        """关闭工作簿，释放底层资源"""
+        if not self.book:
+            return
+        try:
+            self.book.release_resources()
+        except AttributeError:
+            logger.debug("xlrd book does not support release_resources")
 
 
 class XlsxHandler:
