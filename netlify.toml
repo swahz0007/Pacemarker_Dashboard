@@ -1,0 +1,6 @@
+[build]
+  command = "python3 dashboard_ui/scripts/build_netlify_preview.py --source-bundle dashboard_ui/demo_data/data_bundle.js --output-dir netlify_publish"
+  publish = "netlify_publish"
+
+[build.environment]
+  PYTHON_VERSION = "3.11"

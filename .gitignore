@@ -41,6 +41,9 @@ patient_records/
 # 前端数据文件（包含敏感信息）
 dashboard_ui/data/
 
+# Netlify 构建输出（由脱敏脚本生成）
+netlify_publish/
+
 # AI 工具配置
 .claude/
 .gemini/
@@ -53,3 +56,6 @@ doc/audit_result.json
 
 # 课题材料
 2026年自筹课题申报/
+
+# Local Netlify folder
+.netlify
