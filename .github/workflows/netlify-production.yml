@@ -1,0 +1,57 @@
+name: Deploy anonymized dashboard to Netlify
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/netlify-production.yml"
+      - "dashboard_ui/**"
+      - "netlify.toml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build anonymized publish directory
+        run: >
+          python dashboard_ui/scripts/build_netlify_preview.py
+          --source-bundle dashboard_ui/demo_data/data_bundle.js
+          --output-dir netlify_publish
+
+      - name: Verify privacy audit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          audit = json.loads(Path("netlify_publish/privacy_audit.json").read_text(encoding="utf-8"))
+          if audit.get("status") != "pass":
+              raise SystemExit(f"Privacy audit failed: {audit}")
+          print(f"Privacy audit passed for {audit.get('patient_count')} anonymized patients.")
+          PY
+
+      - name: Deploy production site
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: >
+          npx --yes netlify-cli@latest deploy
+          --prod
+          --no-build
+          --dir netlify_publish
+          --site "$NETLIFY_SITE_ID"
+          --auth "$NETLIFY_AUTH_TOKEN"
+          --message "Anonymized dashboard deploy ${GITHUB_SHA}"
