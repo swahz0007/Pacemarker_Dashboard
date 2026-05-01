@@ -16,6 +16,8 @@
         list: null,
         search: null,
         count: null,
+        sidebar: null,
+        main: null,
         detail: null,
         tabs: null,
         panes: null,
@@ -229,6 +231,8 @@
         dom.list = document.getElementById('patientList');
         dom.search = document.getElementById('patientSearch');
         dom.count = document.getElementById('patientCount');
+        dom.sidebar = document.getElementById('sidebar');
+        dom.main = document.getElementById('mainContent');
         dom.dashboardView = document.getElementById('dashboardView');
         dom.detail = document.getElementById('patientDetail');
         dom.backBtn = document.getElementById('backToDashboard');
@@ -280,6 +284,8 @@
 
             currentPatient = parsePatientData(data);
             renderPatient(currentPatient);
+            const overviewTab = document.querySelector('.tab-btn[data-tab="overview"]');
+            if (overviewTab) handleTabClick(overviewTab);
 
             showPatientDetail();
         } catch (err) {
@@ -293,16 +299,51 @@
     function showDashboard() {
         dom.dashboardView.classList.remove('hidden');
         dom.detail.classList.add('hidden');
+        document.body.classList.remove('detail-open');
         document.querySelectorAll('.patient-item').forEach(i => i.classList.remove('active'));
         currentPatient = null;
+        requestAnimationFrame(resizeAllCharts);
     }
 
     function showPatientDetail() {
         dom.dashboardView.classList.add('hidden');
         dom.detail.classList.remove('hidden');
+        document.body.classList.add('detail-open');
+        if (dom.main && dom.main.scrollTo) {
+            dom.main.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        setTimeout(resizeAllCharts, 120);
+        setTimeout(resizeAllCharts, 360);
     }
 
     // --- Dashboard Statistics ---
+
+    function isMobileViewport() {
+        return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function getChartMetrics() {
+        const mobile = isMobileViewport();
+        return {
+            mobile,
+            legendFont: mobile ? 10 : 12,
+            legendPadding: mobile ? 8 : 16,
+            tickFont: mobile ? 10 : 11,
+            barThickness: mobile ? 14 : 18,
+            modelLabelLimit: mobile ? 16 : 30
+        };
+    }
+
+    function truncateChartLabel(value, limit) {
+        const text = String(value || '');
+        return text.length > limit ? `${text.slice(0, limit)}...` : text;
+    }
+
+    function resizeAllCharts() {
+        const charts = [chartInstance, ...dashboardCharts, ...deepCharts, ...leadParamCharts].filter(Boolean);
+        charts.forEach(chart => chart.resize());
+    }
 
     function getThemeColors() {
         const ct = document.documentElement.getAttribute('data-theme');
@@ -427,6 +468,7 @@
 
         const stats = aggregateStats(allPatients);
         const tc = getThemeColors();
+        const cm = getChartMetrics();
 
         // KPI animation
         animateValue(document.getElementById('kpiTotalPatients'), stats.total);
@@ -456,7 +498,7 @@
                 responsive: true, maintainAspectRatio: false,
                 cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: tc.text, padding: 16, usePointStyle: true, pointStyleWidth: 8, font: { size: 12 } } },
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: cm.legendPadding, usePointStyle: true, pointStyleWidth: 8, font: { size: cm.legendFont } } },
                     tooltip: commonTooltip
                 }
             }
@@ -473,7 +515,7 @@
                     borderColor: CHART_PALETTE.slice(0, stats.modelLabels.length),
                     borderWidth: 1,
                     borderRadius: 4,
-                    barThickness: 18
+                    barThickness: cm.barThickness
                 }]
             },
             options: {
@@ -501,13 +543,14 @@
                         grid: { display: false },
                         ticks: {
                             color: tc.text,
-                            font: { family: "system-ui, -apple-system, sans-serif", size: 11 },
+                            font: { family: "system-ui, -apple-system, sans-serif", size: cm.tickFont },
                             padding: 8,
                             crossAlign: 'near',
                             callback: function (value, index, values) {
                                 const modelLabel = this.getLabelForValue(value);
                                 const brand = stats.modelToBrand[modelLabel] || '';
-                                return brand && brand !== '未知' ? `${brand} ${modelLabel}` : modelLabel;
+                                const label = brand && brand !== '未知' ? `${brand} ${modelLabel}` : modelLabel;
+                                return truncateChartLabel(label, cm.modelLabelLimit);
                             }
                         }
                     }
@@ -539,8 +582,8 @@
                     tooltip: commonTooltip
                 },
                 scales: {
-                    x: { grid: { color: tc.grid }, ticks: { color: tc.text } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -566,8 +609,8 @@
                     tooltip: commonTooltip
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: tc.text } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -589,7 +632,7 @@
                 responsive: true, maintainAspectRatio: false,
                 cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: tc.text, padding: 12, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } },
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: cm.legendPadding, usePointStyle: true, pointStyleWidth: 8, font: { size: cm.legendFont } } },
                     tooltip: commonTooltip
                 }
             }
@@ -711,6 +754,7 @@
         if (!ds) return;
 
         const tc = getThemeColors();
+        const cm = getChartMetrics();
 
         // Destroy old deep charts
         deepCharts.forEach(c => c.destroy());
@@ -739,7 +783,7 @@
                 responsive: true, maintainAspectRatio: false,
                 cutout: '60%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: tc.text, padding: 12, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } },
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: cm.legendPadding, usePointStyle: true, pointStyleWidth: 8, font: { size: cm.legendFont } } },
                     tooltip: commonTooltip
                 }
             }
@@ -764,8 +808,8 @@
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: commonTooltip },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: 11 } } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -791,8 +835,8 @@
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: commonTooltip },
                 scales: {
-                    x: { grid: { color: tc.grid }, ticks: { color: tc.text, maxRotation: 45, font: { size: 10 } } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { color: tc.grid }, ticks: { color: tc.text, maxRotation: cm.mobile ? 35 : 45, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -816,8 +860,8 @@
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: commonTooltip },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: tc.text } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -860,6 +904,7 @@
         if (!records) return;
 
         const tc = getThemeColors();
+        const cm = getChartMetrics();
 
         // Collect impedance & threshold data
         const impRA = [], impRV = [], impLV = [];
@@ -928,12 +973,12 @@
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: 16 } },
+                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: cm.legendPadding, font: { size: cm.legendFont } } },
                     tooltip: commonTooltip
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: tc.text } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -954,12 +999,12 @@
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: 12, font: { size: 11 } } },
+                    legend: { position: 'top', labels: { color: tc.text, usePointStyle: true, pointStyleWidth: 8, padding: cm.legendPadding, font: { size: cm.legendFont } } },
                     tooltip: commonTooltip
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: 10 } } },
-                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, stepSize: 1 }, beginAtZero: true }
+                    x: { grid: { display: false }, ticks: { color: tc.text, font: { size: cm.tickFont } } },
+                    y: { grid: { color: tc.grid }, ticks: { color: tc.text, font: { size: cm.tickFont }, stepSize: 1 }, beginAtZero: true }
                 }
             }
         }));
@@ -980,7 +1025,7 @@
                 responsive: true, maintainAspectRatio: false,
                 cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: tc.text, padding: 16, usePointStyle: true, pointStyleWidth: 8, font: { size: 12 } } },
+                    legend: { position: 'bottom', labels: { color: tc.text, padding: cm.legendPadding, usePointStyle: true, pointStyleWidth: 8, font: { size: cm.legendFont } } },
                     tooltip: {
                         ...commonTooltip,
                         callbacks: {
@@ -1205,6 +1250,7 @@
 
         // Reuse shared theme color helper
         const tc = getThemeColors();
+        const cm = getChartMetrics();
         const textColor = tc.text;
         const gridColor = tc.grid;
 
@@ -1242,30 +1288,30 @@
                 },
                 plugins: {
                     legend: {
-                        labels: { color: textColor }
+                        labels: { color: textColor, font: { size: cm.legendFont } }
                     },
                     tooltip: makeTooltipConfig(tc)
                 },
                 scales: {
                     x: {
                         grid: { color: gridColor },
-                        ticks: { color: textColor }
+                        ticks: { color: textColor, maxRotation: cm.mobile ? 35 : 45, font: { size: cm.tickFont } }
                     },
                     y: {
                         type: 'linear',
                         display: true,
                         position: 'left',
-                        title: { display: true, text: '阻抗 (Ω)', color: textColor },
+                        title: { display: true, text: '阻抗 (Ω)', color: textColor, font: { size: cm.tickFont } },
                         grid: { color: gridColor },
-                        ticks: { color: textColor }
+                        ticks: { color: textColor, font: { size: cm.tickFont } }
                     },
                     y1: {
                         type: 'linear',
                         display: true,
                         position: 'right',
-                        title: { display: true, text: '阈值 (V)', color: textColor },
+                        title: { display: true, text: '阈值 (V)', color: textColor, font: { size: cm.tickFont } },
                         grid: { drawOnChartArea: false },
-                        ticks: { color: textColor }
+                        ticks: { color: textColor, font: { size: cm.tickFont } }
                     }
                 }
             }
@@ -1279,6 +1325,8 @@
         dom.panes.forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(btn.dataset.tab).classList.add('active');
+        currentTab = btn.dataset.tab;
+        setTimeout(resizeAllCharts, 80);
     }
 
     const handleSearch = debounce((term) => {
@@ -1323,6 +1371,8 @@
             handleSearch(e.target.value);
         });
 
+        window.addEventListener('resize', debounce(resizeAllCharts, 150));
+
         // Back to Dashboard
         if (dom.backBtn) {
             dom.backBtn.addEventListener('click', showDashboard);
@@ -1352,6 +1402,7 @@
                     renderDashboard();
                     renderDeepCharts();
                     renderLeadCharts();
+                    scheduleDrilldownHandlers();
                 }
             });
         }
@@ -1371,6 +1422,7 @@
                     dashboardCharts.forEach(c => c.resize());
                     deepCharts.forEach(c => c.resize());
                     leadParamCharts.forEach(c => c.resize());
+                    attachDrilldownHandlers();
                 }, 350);
             });
         }
@@ -1425,105 +1477,104 @@
 
         // --- Wire drill-down to charts ---
         // Attach click handlers after charts are rendered
+        function wireDrilldownChart(chart, onSelect) {
+            if (!chart) return;
+            chart.options.events = ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove', 'touchend'];
+            chart.options.onHover = (evt, elements) => {
+                if (chart.canvas) {
+                    chart.canvas.style.cursor = elements && elements.length > 0 ? 'pointer' : 'default';
+                }
+            };
+            chart.options.onClick = (evt, elements) => {
+                if (elements && elements.length > 0) {
+                    onSelect(elements[0].index);
+                }
+            };
+            if (chart.canvas) {
+                chart.canvas.style.touchAction = 'manipulation';
+            }
+            chart.update('none');
+        }
+
+        function scheduleDrilldownHandlers() {
+            setTimeout(attachDrilldownHandlers, 80);
+        }
+
         function attachDrilldownHandlers() {
             // 1. Brand Distribution chart → filter by brand
             const brandChart = dashboardCharts[0]; // first chart is brand doughnut
-            if (brandChart) {
-                brandChart.options.onClick = (evt, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        const brandName = brandChart.data.labels[idx];
-                        const filtered = allPatients.filter(p => (p.brand || '未知') === brandName);
-                        openDrilldown(`品牌: ${brandName} (${filtered.length}人)`, filtered);
-                    }
-                };
-                brandChart.update();
-            }
+            wireDrilldownChart(brandChart, (idx) => {
+                const brandName = brandChart.data.labels[idx];
+                const filtered = allPatients.filter(p => (p.brand || '未知') === brandName);
+                openDrilldown(`品牌: ${brandName} (${filtered.length}人)`, filtered);
+            });
 
             // 2. Model Top 10 chart → filter by model
             const modelChart = dashboardCharts[1];
-            if (modelChart) {
-                modelChart.options.onClick = (evt, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        const modelName = modelChart.data.labels[idx];
-                        const filtered = allPatients.filter(p => (p.model || '未知') === modelName);
-                        openDrilldown(`型号: ${modelName} (${filtered.length}人)`, filtered);
-                    }
-                };
-                modelChart.update();
-            }
+            wireDrilldownChart(modelChart, (idx) => {
+                const modelName = modelChart.data.labels[idx];
+                const filtered = allPatients.filter(p => (p.model || '未知') === modelName);
+                openDrilldown(`型号: ${modelName} (${filtered.length}人)`, filtered);
+            });
 
             // 3. Pacing Mode chart → filter by mode
             const modeChart = deepCharts[0];
-            if (modeChart) {
-                modeChart.options.onClick = (evt, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        const modeName = modeChart.data.labels[idx];
-                        // Need to match from records
-                        const records = window.PACEMAKER_DATA.records;
-                        const matched = [];
-                        Object.entries(records).forEach(([fn, patient]) => {
-                            const recs = patient['程控记录'] || [];
-                            if (recs.length === 0) return;
-                            const latest = recs[recs.length - 1];
-                            const mode = latest.basic_params?.settings?.['模式'];
-                            if (mode && mode.trim().toUpperCase() === modeName) {
-                                matched.push({
-                                    name: patient['姓名'],
-                                    id: patient['登记号'],
-                                    brand: latest.header?.['品牌'] || '--',
-                                    model: latest.header?.['型号'] || '--',
-                                    implant_date: latest.header?.['植入日期'] || '--',
-                                    count: recs.length,
-                                    file_name: fn
-                                });
-                            }
+            wireDrilldownChart(modeChart, (idx) => {
+                const modeName = modeChart.data.labels[idx];
+                // Need to match from records
+                const records = window.PACEMAKER_DATA.records;
+                const matched = [];
+                Object.entries(records).forEach(([fn, patient]) => {
+                    const recs = patient['程控记录'] || [];
+                    if (recs.length === 0) return;
+                    const latest = recs[recs.length - 1];
+                    const mode = latest.basic_params?.settings?.['模式'];
+                    if (mode && mode.trim().toUpperCase() === modeName) {
+                        matched.push({
+                            name: patient['姓名'],
+                            id: patient['登记号'],
+                            brand: latest.header?.['品牌'] || '--',
+                            model: latest.header?.['型号'] || '--',
+                            implant_date: latest.header?.['植入日期'] || '--',
+                            count: recs.length,
+                            file_name: fn
                         });
-                        openDrilldown(`起搏模式: ${modeName} (${matched.length}人)`, matched);
                     }
-                };
-                modeChart.update();
-            }
+                });
+                openDrilldown(`起搏模式: ${modeName} (${matched.length}人)`, matched);
+            });
 
             // 4. Battery Voltage chart → filter by voltage range
             const voltChart = deepCharts[1];
-            if (voltChart) {
-                voltChart.options.onClick = (evt, elements) => {
-                    if (elements.length > 0) {
-                        const idx = elements[0].index;
-                        const rangeLabel = voltChart.data.labels[idx];
-                        const ranges = [[0, 2.4], [2.4, 2.6], [2.6, 2.8], [2.8, 3.0], [3.0, 3.2], [3.2, 99]];
-                        const [lo, hi] = ranges[idx];
-                        const records = window.PACEMAKER_DATA.records;
-                        const matched = [];
-                        Object.entries(records).forEach(([fn, patient]) => {
-                            const recs = patient['程控记录'] || [];
-                            if (recs.length === 0) return;
-                            const latest = recs[recs.length - 1];
-                            const batt = latest.test_params?.battery_and_leads;
-                            const vStr = batt?.['电池电压（V）'] || batt?.['电池电压(V)'] || batt?.['电池电压'];
-                            if (vStr) {
-                                const v = parseFloat(vStr);
-                                if (!isNaN(v) && v >= lo && v < hi) {
-                                    matched.push({
-                                        name: patient['姓名'],
-                                        id: patient['登记号'],
-                                        brand: latest.header?.['品牌'] || '--',
-                                        model: latest.header?.['型号'] || '--',
-                                        implant_date: latest.header?.['植入日期'] || '--',
-                                        count: recs.length,
-                                        file_name: fn
-                                    });
-                                }
-                            }
-                        });
-                        openDrilldown(`电池电压: ${rangeLabel} (${matched.length}人)`, matched);
+            wireDrilldownChart(voltChart, (idx) => {
+                const rangeLabel = voltChart.data.labels[idx];
+                const ranges = [[0, 2.4], [2.4, 2.6], [2.6, 2.8], [2.8, 3.0], [3.0, 3.2], [3.2, 99]];
+                const [lo, hi] = ranges[idx];
+                const records = window.PACEMAKER_DATA.records;
+                const matched = [];
+                Object.entries(records).forEach(([fn, patient]) => {
+                    const recs = patient['程控记录'] || [];
+                    if (recs.length === 0) return;
+                    const latest = recs[recs.length - 1];
+                    const batt = latest.test_params?.battery_and_leads;
+                    const vStr = batt?.['电池电压（V）'] || batt?.['电池电压(V)'] || batt?.['电池电压'];
+                    if (vStr) {
+                        const v = parseFloat(vStr);
+                        if (!isNaN(v) && v >= lo && v < hi) {
+                            matched.push({
+                                name: patient['姓名'],
+                                id: patient['登记号'],
+                                brand: latest.header?.['品牌'] || '--',
+                                model: latest.header?.['型号'] || '--',
+                                implant_date: latest.header?.['植入日期'] || '--',
+                                count: recs.length,
+                                file_name: fn
+                            });
+                        }
                     }
-                };
-                voltChart.update();
-            }
+                });
+                openDrilldown(`电池电压: ${rangeLabel} (${matched.length}人)`, matched);
+            });
         }
 
         // Attach drill-down after initial render

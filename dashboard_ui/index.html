@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pacemaker Dashboard</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=300">
+    <link rel="stylesheet" href="assets/css/style.css?v=302">
     <!-- Google Fonts for Medical Aesthetic -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -30,9 +30,10 @@
                 <div class="loading">正在加载数据...</div>
             </div>
             <div class="sidebar-footer">
-                共 <span id="patientCount">0</span> 份档案
-                <button id="themeToggleBtn" class="theme-toggle-btn">
-                    <span class="icon">🌓</span> 切换主题
+                <span class="archive-count">共 <span id="patientCount">0</span> 份档案</span>
+                <button id="themeToggleBtn" class="theme-toggle-btn" type="button" title="切换主题" aria-label="切换主题">
+                    <span class="icon">🌓</span>
+                    <span class="theme-label">切换主题</span>
                 </button>
             </div>
         </aside>
@@ -279,22 +280,24 @@
                             </div>
 
                             <!-- Lead Status (Dynamic Grid) -->
-                            <div class="card full-width">
+                            <div class="card full-width table-card">
                                 <h3><span class="icon">🔌</span> 导线状态 (最新程控)</h3>
-                                <table class="medical-table">
-                                    <thead>
-                                        <tr>
-                                            <th>腔室</th>
-                                            <th>阻抗 (Ω)</th>
-                                            <th>感知 (mV)</th>
-                                            <th>阈值 (V)</th>
-                                            <th>输出</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="leadTableBody">
-                                        <!-- Populated by JS -->
-                                    </tbody>
-                                </table>
+                                <div class="table-scroll">
+                                    <table class="medical-table">
+                                        <thead>
+                                            <tr>
+                                                <th>腔室</th>
+                                                <th>阻抗 (Ω)</th>
+                                                <th>感知 (mV)</th>
+                                                <th>阈值 (V)</th>
+                                                <th>输出</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="leadTableBody">
+                                            <!-- Populated by JS -->
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
 
                             <!-- Trends Chart Container -->
@@ -332,7 +335,7 @@
         </div>
     </div>
     <script src="data/data_bundle.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/app.js?v=302"></script>
 
 </body>
 
