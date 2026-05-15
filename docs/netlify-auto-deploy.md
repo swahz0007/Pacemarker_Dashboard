@@ -18,7 +18,7 @@ Set these repository secrets in GitHub before the workflow can deploy:
 
 - `NETLIFY_AUTH_TOKEN`: a Netlify personal access token with deploy access.
 - `NETLIFY_SITE_ID`: the Netlify site id, currently
-  `ea1e3dcb-1308-41fc-98dc-8163036efea9`.
+  `7fa5d566-bcb5-4788-8579-913d8e63a35e`.
 
 ## Production Gate
 
