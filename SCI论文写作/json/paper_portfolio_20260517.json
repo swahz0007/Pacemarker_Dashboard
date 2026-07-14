@@ -1,0 +1,71 @@
+{
+  "snapshot_date": "2026-05-17",
+  "papers": [
+    {
+      "id": "paper_1",
+      "priority": 1,
+      "chinese_title": "多品牌起搏器/ICD/CRT 程控报告结构化数据库的构建与字段级审计：一项单中心真实世界数字化队列研究",
+      "english_title": "Construction and Field-Level Audit of a Multi-Brand CIED Programming Report Database: A Single-Center Real-World Digital Cohort Study",
+      "article_type": "Original Research Article; Methods / Validation / Digital Health Database Study",
+      "grant_use": "5 万元课题 A：多品牌 CIED 程控报告结构化数据库构建与字段级质控研究",
+      "core_question": "Can multi-brand, multi-template CIED programming reports be reliably converted into a patient-level longitudinal structured database?",
+      "main_results": [
+        "database scale and temporal coverage",
+        "brand and device type coverage",
+        "longitudinal record structure",
+        "key field availability",
+        "field-level audit performance",
+        "dashboard-based source-traceable review"
+      ],
+      "target_journals": {
+        "preferred_domain": "medical informatics and digital health",
+        "reasonable_if_range": "3-4.5",
+        "stretch": [
+          "European Heart Journal - Digital Health",
+          "International Journal of Medical Informatics"
+        ],
+        "safer": [
+          "BMC Medical Informatics and Decision Making",
+          "JMIR Medical Informatics"
+        ]
+      },
+      "status": "ready for Chinese outline and figure planning"
+    },
+    {
+      "id": "paper_2",
+      "priority": 2,
+      "chinese_title": "中国三甲医院 CIED 程控报告真实世界特征及随访模式的回顾性分析",
+      "english_title": "Real-World Characteristics and Follow-Up Patterns of CIED Programming Reports in a Chinese Tertiary Hospital: A Retrospective Study",
+      "article_type": "Original Research Article; Retrospective Real-World Study",
+      "grant_use": "5 万元课题 B：中国三甲医院 CIED 程控报告真实世界特征及随访模式回顾性研究",
+      "core_question": "What real-world programming characteristics and follow-up patterns are observed in a Chinese tertiary-hospital CIED programming report database?",
+      "main_results": [
+        "brand, model, and device type distribution",
+        "pacing mode distribution",
+        "battery, threshold, impedance, and sensing parameter distributions",
+        "single-visit and multi-visit patient structure",
+        "follow-up interval analysis",
+        "device subgroup analyses when sample size permits"
+      ],
+      "target_journals": {
+        "preferred_domain": "cardiology, electrophysiology, and real-world research",
+        "reasonable_if_range": "2-3",
+        "safer": [
+          "BMC Cardiovascular Disorders",
+          "Heart Rhythm O2",
+          "Journal of Arrhythmia",
+          "PACE - Pacing and Clinical Electrophysiology"
+        ]
+      },
+      "status": "prepare after paper 1 structure is stable"
+    }
+  ],
+  "reserved_future_papers": [
+    "longitudinal trajectories of battery voltage, thresholds, impedance, and sensing",
+    "Micra AV subgroup analysis",
+    "CRT / ICD subgroup analysis",
+    "follow-up quality control using programming recommendations and actual follow-up intervals",
+    "outcome-linked CIED risk modeling only if automated clinical outcomes become available"
+  ]
+}
+

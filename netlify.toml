@@ -1,6 +1,24 @@
 [build]
-  command = "python3 dashboard_ui/scripts/build_netlify_preview.py --source-bundle dashboard_ui/demo_data/data_bundle.js --output-dir netlify_publish"
+  command = "npm run build"
   publish = "netlify_publish"
 
 [build.environment]
+  NODE_VERSION = "20"
   PYTHON_VERSION = "3.11"
+
+# This production site is a public demonstration. Its build pipeline publishes
+# only de-identified data and runs a privacy audit before deployment.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Permissions-Policy = "camera=(), geolocation=(), microphone=()"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"

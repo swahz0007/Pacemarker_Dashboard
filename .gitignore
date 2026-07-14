@@ -59,3 +59,14 @@ doc/audit_result.json
 
 # Local Netlify folder
 .netlify
+
+# Node dependencies and generated browser bundles
+node_modules/
+dashboard_ui/assets/js/identity-client.js
+
+# Offline EXE build artifacts and local test package
+offline_exe_test_package/
+PacemakerDashboard_offline_test.zip
+.offline_build/
+PacemakerDashboard_offline/
+pacemaker_config.json

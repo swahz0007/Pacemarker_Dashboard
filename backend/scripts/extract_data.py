@@ -16,24 +16,32 @@ if str(BACKEND_DIR) not in sys.path:
 from config import MATCHING_REPORT_FILE
 from core.extractors import process_file
 from core.handlers import is_xls_supported
+from scripts.match_templates import is_matched_status
 
 
-def extract_all_data():
+def extract_all_data(return_summary=False):
     """
     从匹配报告中提取所有文件的数据
-    返回: 提取的数据列表（内存管道，不写入文件）
+    返回: 提取的数据列表（内存管道，不写入文件）。
+    ``return_summary=True`` 时同时返回可用于阻断不完整全量处理的汇总信息。
     """
     if not MATCHING_REPORT_FILE.exists():
         print(f"错误: 匹配报告不存在 ({MATCHING_REPORT_FILE})")
         print("请先运行 match_templates.py")
-        return []
+        summary = {
+            "matching_report_found": False,
+            "matched_files": 0,
+            "unmatched_files": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "skipped_unsupported": 0,
+        }
+        return ([], summary) if return_summary else []
     
     with open(MATCHING_REPORT_FILE, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        files = [
-            r for r in reader
-            if "Match" in r["Status"] and not r["Filename"].startswith("~$")
-        ]
+        all_rows = [r for r in reader if not r.get("Filename", "").startswith("~$")]
+        files = [r for r in all_rows if is_matched_status(r.get("Status"))]
 
     print(f"开始全量提取，共 {len(files)} 个文件...")
     
@@ -71,7 +79,15 @@ def extract_all_data():
         print(f"失败主因: {top_reason} ({top_count} 条)")
         if "xlrd is not installed" in top_reason:
             print("提示: 当前环境缺少 xlrd，.xls 文件将被跳过；安装 xlrd 后可恢复 .xls 提取能力。")
-    return json_output
+    summary = {
+        "matching_report_found": True,
+        "matched_files": len(files),
+        "unmatched_files": len(all_rows) - len(files),
+        "succeeded": len(json_output),
+        "failed": error_count,
+        "skipped_unsupported": skipped_count,
+    }
+    return (json_output, summary) if return_summary else json_output
 
 
 if __name__ == "__main__":

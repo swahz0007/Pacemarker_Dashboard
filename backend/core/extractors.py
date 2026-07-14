@@ -9,12 +9,13 @@ from config import (
     KW_BASIC, KW_ANTITACHY, KW_TEST, KW_EVENT,
     ZAT_COL_HEADERS, ZAT_ROW_HEADERS,
     Z2_COL_HEADERS, Z2_ROW_HEADERS,
-    Z3_COL_HEADERS, Z3_ROW_HEADERS
+    Z3_COL_HEADERS, Z3_ROW_HEADERS,
+    PIPELINE_VERSION, RECORD_SCHEMA_VERSION,
 )
 from core.handlers import get_handler
 from core.utils import (
     clean_value, clean_label, is_ignored,
-    extract_name_from_filename, excel_date_to_str
+    extract_name_from_filename, excel_date_to_str, stable_source_id,
 )
 
 
@@ -270,23 +271,26 @@ def extract_events_flexible(handler, start_row, end_row):
     return data
 
 
-def validate_and_fix_header(d_header: dict, filename: str) -> dict:
-    """校验并修复 header 数据：姓名不匹配时仅用文件名姓名覆盖，但保留登记号"""
+def validate_header_identity(d_header: dict, filename: str) -> tuple[dict, list[dict]]:
+    """校验身份信息；不再以文件名静默覆盖 Excel 中的姓名。"""
     import logging
     logger = logging.getLogger(__name__)
-    
+    flags = []
     header_name = d_header.get("姓名", "")
     filename_name = extract_name_from_filename(filename)
-    
+
     if not header_name or not filename_name:
-        return d_header
-    
-    # 姓名不匹配时，修正姓名但保留登记号（登记号是独立字段，不应被清空）
+        return d_header, flags
+
+    # 身份冲突必须进入隔离队列人工复核，不能用文件名覆盖原始 header。
     if filename_name not in header_name and header_name not in filename_name:
-        logger.warning(f"姓名不匹配: 文件名='{filename_name}', header='{header_name}', 文件={filename}")
-        d_header["姓名"] = filename_name
-    
-    return d_header
+        logger.warning("患者姓名与文件名不一致，已标记待复核: %s", filename)
+        flags.append({
+            "code": "IDENTITY_NAME_MISMATCH",
+            "source": "filename_vs_header",
+        })
+
+    return d_header, flags
 
 
 def process_file(filepath, filename):
@@ -296,11 +300,11 @@ def process_file(filepath, filename):
         handler = get_handler(filepath)
         anchors = get_anchors(handler)
         
-        rb = anchors["basic"] or handler.nrows
+        rb = anchors["basic"] if anchors["basic"] is not None else handler.nrows
         rat = anchors["antitachy"]
-        rt = anchors["test"] or handler.nrows
-        event_row = anchors["event"] or handler.nrows
-        basic_end = rat if rat else rt
+        rt = anchors["test"] if anchors["test"] is not None else handler.nrows
+        event_row = anchors["event"] if anchors["event"] is not None else handler.nrows
+        basic_end = rat if rat is not None else rt
 
         d_header, _ = extract_kv_in_range(handler, 0, rb)
         
@@ -318,14 +322,14 @@ def process_file(filepath, filename):
                             d_header[label] = val
                             missing_keys.discard(label)
         
-        # 校验并修复 header 数据
-        d_header = validate_and_fix_header(d_header, filename)
+        # 身份冲突由分组阶段隔离，不污染患者主档案。
+        d_header, identity_flags = validate_header_identity(d_header, filename)
         
         d_basic, _ = extract_kv_in_range(handler, rb, basic_end)
         d_basic_tbl = extract_table_in_range(handler, rb, basic_end, Z2_COL_HEADERS, Z2_ROW_HEADERS)
 
         d_antitachy = {}
-        if rat:
+        if rat is not None:
             d_antitachy = extract_antitachy_table(handler, rat, rt)
 
         d_test, _ = extract_kv_in_range(handler, rt, event_row)
@@ -343,12 +347,20 @@ def process_file(filepath, filename):
             sig_text, sig_date = extract_footer_info(handler, event_row)
 
         result = {
-            "meta": {"filename": filename, "path": filepath},
+            "meta": {
+                "filename": filename,
+                "source_id": stable_source_id(filepath),
+                "schema_version": RECORD_SCHEMA_VERSION,
+                "pipeline_version": PIPELINE_VERSION,
+            },
             "header": d_header,
             "basic_params": {"settings": d_basic, "measurements": d_basic_tbl},
         }
         if d_antitachy:
             result["antitachy_params"] = d_antitachy
+
+        if identity_flags:
+            result["meta"]["quality_flags"] = identity_flags
 
         result.update({
             "test_params": {"battery_and_leads": d_test, "threshold_tests": d_test_tbl},

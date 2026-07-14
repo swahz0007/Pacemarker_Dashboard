@@ -34,7 +34,7 @@ def generate_charts():
     for file_path in patient_files:
         try:
             filename = os.path.basename(file_path)
-            if filename in ['processed_files.json', 'matching_report.csv']:
+            if filename in ['processed_files.json', 'matching_report.csv', 'quarantine_records.json']:
                 continue
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)

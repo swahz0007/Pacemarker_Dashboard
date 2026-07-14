@@ -4,12 +4,55 @@
 
 import re
 import logging
+import hashlib
+import json
+import os
+import tempfile
 from pathlib import Path
 from datetime import datetime, timedelta
 
 from config import IGNORE_IN_KV
 
 logger = logging.getLogger(__name__)
+
+
+def atomic_write_json(path: Path, data, *, indent: int = 2) -> None:
+    """以同目录临时文件 + replace 原子写入 JSON，避免中断留下半个输出文件。"""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as outfile:
+            json.dump(data, outfile, ensure_ascii=False, indent=indent)
+            outfile.flush()
+            os.fsync(outfile.fileno())
+        os.replace(temp_name, destination)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def stable_patient_filename(registration_id: str) -> str:
+    """为患者输出生成不可逆、无直接标识符的稳定文件名。"""
+    digest = hashlib.sha256(str(registration_id).encode("utf-8")).hexdigest()[:20]
+    return f"patient_{digest}.json"
+
+
+def proxy_registration_id(filename: str, source_hint: str = "") -> str:
+    """登记号缺失时生成稳定代理 ID，避免同名报告被错误合并。"""
+    seed = f"{source_hint}\x00{filename}"
+    return f"PROXY_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:20]}"
+
+
+def stable_source_id(filepath) -> str:
+    """返回来源路径的不可逆稳定标识，不把本地绝对路径写入患者输出。"""
+    normalized = str(Path(filepath).resolve())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def clean_value(val):

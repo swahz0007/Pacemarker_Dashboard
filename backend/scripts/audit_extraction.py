@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import random
+import re
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -34,15 +35,12 @@ if str(BACKEND_DIR) not in sys.path:
 
 from config import (
     PATIENT_RECORDS_DIR, DATA_REPOSITORY,
+    KW_BASIC, KW_ANTITACHY, KW_TEST, KW_EVENT,
+    ZAT_COL_HEADERS, ZAT_ROW_HEADERS,
     Z2_COL_HEADERS, Z2_ROW_HEADERS, Z3_COL_HEADERS, Z3_ROW_HEADERS,
 )
 from core.handlers import get_handler
-from core.utils import clean_value
-from core.extractors import (
-    extract_table_in_range, get_anchors,
-    extract_events_flexible, extract_antitachy_table,
-    extract_footer_info, extract_kv_in_range,
-)
+from core.utils import atomic_write_json, clean_value, stable_source_id
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -57,7 +55,7 @@ AUDIT_JSON = DOC_DIR / "audit_result.json"
 # ============================================================
 
 def read_extracted_json(filepath):
-    """读取患者 JSON，返回 {source_filename: record_data} 映射"""
+    """读取正式或隔离患者输出，保留 source_id，避免同名源文件相互覆盖。"""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -67,21 +65,59 @@ def read_extracted_json(filepath):
     if not isinstance(data, dict):
         logger.warning("患者JSON结构异常，已跳过: %s", str(filepath))
         return {}
-    result = {}
-    for record in data.get("程控记录", []):
+    result = []
+    records = data.get("程控记录", data.get("records", []))
+    if not isinstance(records, list):
+        return result
+    for record in records:
         meta = record.get("meta", {})
         fn = meta.get("filename", "")
         if fn:
-            result[fn] = {"raw_record": record, "flat_fields": {}}
+            result.append({
+                "source_id": meta.get("source_id", ""),
+                "filename": fn,
+                "raw_record": record,
+            })
     return result
 
 
-def find_source_file(filename):
-    """在数据仓库中查找源 Excel 文件"""
+def build_source_index():
+    """一次性建立 source_id 与文件名索引，杜绝按同名文件随机取第一个。"""
+    by_id = {}
+    by_filename = defaultdict(list)
     for root, dirs, files in os.walk(DATA_REPOSITORY):
-        if filename in files:
-            return os.path.join(root, filename)
-    return None
+        dirs.sort()
+        for filename in sorted(files):
+            if filename.startswith("~$") or not filename.lower().endswith((".xls", ".xlsx")):
+                continue
+            path = os.path.join(root, filename)
+            source_id = stable_source_id(path)
+            by_id[source_id] = path
+            by_filename[filename].append(path)
+    return by_id, by_filename
+
+
+def get_audit_anchors(handler):
+    """审计专用锚点扫描，不复用生产提取器的定位逻辑。"""
+    anchors = {"basic": None, "antitachy": None, "test": None, "event": None}
+    at_af_row = None
+    keywords = {
+        "basic": KW_BASIC,
+        "antitachy": KW_ANTITACHY,
+        "test": KW_TEST,
+        "event": KW_EVENT,
+    }
+    for row in range(handler.nrows):
+        for col in range(min(5, handler.ncols)):
+            value = clean_value(handler.get_cell_value(row, col))
+            for name, keyword in keywords.items():
+                if anchors[name] is None and keyword in value:
+                    anchors[name] = row
+            if at_af_row is None and "AT/AF事件" in value:
+                at_af_row = row
+    if anchors["event"] is None:
+        anchors["event"] = at_af_row
+    return anchors
 
 
 def _values_match(a, b):
@@ -98,30 +134,82 @@ def _values_match(a, b):
     return a_text == b_text
 
 
-def _find_in_excel(handler, key, expected_value):
-    """在 Excel 中查找简单键值字段（标签→右侧值）"""
+def _find_in_excel(handler, key, expected_value, start_row=0, end_row=None):
+    """独立查找标签右侧值；多处同名标签无法消歧时显式报告 AMBIGUOUS。"""
     if not key:
         return ""
     key_str = str(key).strip()
-    key_positions = []
-    for r in range(handler.nrows):
+    end_row = handler.nrows if end_row is None else min(end_row, handler.nrows)
+    candidates = []
+    for r in range(max(0, start_row), end_row):
         for c in range(handler.ncols):
             cell_val = clean_value(handler.get_cell_value(r, c))
             if cell_val and cell_val.strip() == key_str:
-                key_positions.append((r, c))
-    if key_positions:
-        for kr, kc in key_positions:
-            for offset in range(1, 8):
-                nc = kc + offset
-                if nc >= handler.ncols:
-                    break
-                val = clean_value(handler.get_cell_value(kr, nc))
-                if val and handler.is_blue_cell(kr, nc):
-                    break
-                if val:
-                    return val
+                for offset in range(1, 8):
+                    next_col = c + offset
+                    if next_col >= handler.ncols:
+                        break
+                    value = clean_value(handler.get_cell_value(r, next_col))
+                    if value and handler.is_blue_cell(r, next_col):
+                        break
+                    if value:
+                        candidates.append(value)
+                        break
+    if not candidates:
         return "__NOT_FOUND__"
-    return "__NOT_FOUND__"
+    matched = [candidate for candidate in candidates if _values_match(candidate, expected_value)]
+    if matched:
+        return matched[0]
+    unique = list(dict.fromkeys(candidates))
+    return unique[0] if len(unique) == 1 else "__AMBIGUOUS__"
+
+
+def _table_value_oracle(handler, start_row, end_row, key, row_headers, col_headers):
+    """用原始单元格行/列表头交叉定位表格值，不调用生产表格提取函数。"""
+    row_label = next((item for item in row_headers if key.startswith(f"{item}_")), None)
+    if not row_label:
+        return "__NOT_FOUND__"
+    col_label = key[len(row_label) + 1:]
+    if col_label not in col_headers:
+        return "__NOT_FOUND__"
+
+    row_index = None
+    col_index = None
+    for row in range(max(0, start_row), min(end_row, handler.nrows)):
+        for col in range(handler.ncols):
+            value = clean_value(handler.get_cell_value(row, col))
+            if row_index is None and value == row_label:
+                row_index = row
+            if col_index is None and col_label in value:
+                col_index = col
+        if row_index is not None and col_index is not None:
+            break
+    if row_index is None or col_index is None:
+        return "__NOT_FOUND__"
+    value = clean_value(handler.get_cell_value(row_index, col_index))
+    if not value:
+        value = clean_value(handler.get_cell_value(row_index, col_index + 1))
+    return value or "__NOT_FOUND__"
+
+
+def _footer_date_oracle(handler, start_row, expected_value):
+    """独立扫描页脚日期；签名自由文本不以同一提取函数回读验证。"""
+    date_pattern = re.compile(r"\d{4}\s*[-./年]\s*\d{1,2}\s*[-./月]\s*\d{1,2}\s*[日]?")
+    candidates = []
+    for row in range(max(0, start_row), min(handler.nrows, start_row + 50)):
+        for col in range(handler.ncols):
+            value = clean_value(handler.get_cell_value(row, col))
+            if value:
+                match = date_pattern.search(value)
+                if match:
+                    candidates.append(match.group(0))
+    if not candidates:
+        return "__NOT_FOUND__"
+    matched = [candidate for candidate in candidates if _values_match(candidate, expected_value)]
+    if matched:
+        return matched[0]
+    unique = list(dict.fromkeys(candidates))
+    return unique[0] if len(unique) == 1 else "__AMBIGUOUS__"
 
 
 # ============================================================
@@ -143,12 +231,26 @@ def audit_single_record(source_path, extracted_record):
 
     try:
         raw_record = extracted_record.get("raw_record", {})
-        anchors = get_anchors(handler)
+        anchors = get_audit_anchors(handler)
 
-        def add_field(section, key, excel_val, extracted_val):
+        header_end = anchors["basic"] if anchors["basic"] is not None else min(5, handler.nrows)
+        basic_start = anchors["basic"] if anchors["basic"] is not None else 0
+        basic_end = anchors["antitachy"] if anchors["antitachy"] is not None else (
+            anchors["test"] if anchors["test"] is not None else handler.nrows
+        )
+        test_start = anchors["test"] if anchors["test"] is not None else basic_end
+        test_end = anchors["event"] if anchors["event"] is not None else handler.nrows
+        event_start = anchors["event"] if anchors["event"] is not None else test_end
+
+        def add_field(section, key, excel_val, extracted_val, status_override=None):
             ev = str(excel_val).strip() if excel_val else ""
             xv = str(extracted_val).strip() if extracted_val else ""
-            if ev == "__NOT_FOUND__":
+            if status_override:
+                status = status_override
+            elif ev == "__AMBIGUOUS__":
+                status = "AMBIGUOUS"
+                ev = ""
+            elif ev == "__NOT_FOUND__":
                 status = "NOT_FOUND"
                 ev = ""
             elif not ev and not xv:
@@ -161,111 +263,84 @@ def audit_single_record(source_path, extracted_record):
                 status = "MATCH"
             else:
                 status = "MISMATCH"
-            # 过滤无意义字段：双方都没有数据的不纳入统计
             if status == "BOTH_EMPTY":
                 return
             if status == "NOT_FOUND" and not xv:
-                return  # Excel 找不到 + 系统也没提取到 = 该字段不存在（如左心室在双腔起搏器中）
-            fields.append({"section": section, "key": key, "excel_val": ev, "extracted_val": xv, "status": status})
+                return
+            fields.append({
+                "section": section, "key": key, "excel_val": ev,
+                "extracted_val": xv, "status": status,
+            })
 
-        # 1. Header
-        header = raw_record.get("header", {})
-        for key, val in header.items():
-            add_field("header", key, _find_in_excel(handler, key, val), val)
+        # 1. Header 与 2. 设置：独立的标签-右侧值查找。
+        for key, value in raw_record.get("header", {}).items():
+            add_field("header", key, _find_in_excel(handler, key, value, 0, header_end), value)
 
-        # 2. Basic Params - Settings (KV)
         settings = raw_record.get("basic_params", {}).get("settings", {})
-        for key, val in settings.items():
-            add_field("settings", key, _find_in_excel(handler, key, val), val)
+        for key, value in settings.items():
+            add_field("settings", key, _find_in_excel(handler, key, value, basic_start, basic_end), value)
 
-        # 3. Basic Params - Measurements (表格重提取)
+        # 3. 基础表格和 5. 阈值表格：独立的行/列表头交叉定位。
         measurements = raw_record.get("basic_params", {}).get("measurements", {})
-        if measurements:
-            basic_start = (anchors.get("basic") or 0) + 1
-            basic_end = anchors.get("antitachy") or anchors.get("test") or handler.nrows
-            re_z2 = extract_table_in_range(handler, basic_start, basic_end, Z2_COL_HEADERS, Z2_ROW_HEADERS)
-            for key, val in measurements.items():
-                re_val = re_z2.get(key, "__NOT_FOUND__")
-                add_field("measurements", key, re_val or "__NOT_FOUND__", val)
+        for key, value in measurements.items():
+            add_field(
+                "measurements", key,
+                _table_value_oracle(handler, basic_start, basic_end, key, Z2_ROW_HEADERS, Z2_COL_HEADERS),
+                value,
+            )
 
-        # 4. Test Params - Battery (KV)
         battery = raw_record.get("test_params", {}).get("battery_and_leads", {})
-        for key, val in battery.items():
-            add_field("battery", key, _find_in_excel(handler, key, val), val)
+        for key, value in battery.items():
+            add_field("battery", key, _find_in_excel(handler, key, value, test_start, test_end), value)
 
-        # 5. Test Params - Thresholds (表格重提取)
         thresholds = raw_record.get("test_params", {}).get("threshold_tests", {})
-        if thresholds:
-            test_start = (anchors.get("test") or 0) + 1
-            test_end = anchors.get("event") or handler.nrows
-            re_z3 = extract_table_in_range(handler, test_start, test_end, Z3_COL_HEADERS, Z3_ROW_HEADERS)
-            for key, val in thresholds.items():
-                re_val = re_z3.get(key, "__NOT_FOUND__")
-                add_field("thresholds", key, re_val or "__NOT_FOUND__", val)
+        for key, value in thresholds.items():
+            add_field(
+                "thresholds", key,
+                _table_value_oracle(handler, test_start, test_end, key, Z3_ROW_HEADERS, Z3_COL_HEADERS),
+                value,
+            )
 
-        # 6. Events (重提取)
+        # 6. 事件：仅以原始表格中的同名标签和值作为审计依据。
         events = raw_record.get("events_and_footer", {})
-        if events:
-            event_start = anchors.get("event") or 0
-            re_events = extract_events_flexible(handler, event_start, handler.nrows)
-            for key, val in events.items():
-                re_val = re_events.get(key)
-                if re_val is not None:
-                    excel_val = re_val or "__NOT_FOUND__"
-                else:
-                    excel_val = _find_in_excel(handler, key, val)
-                add_field("events", key, excel_val, val)
+        for key, value in events.items():
+            add_field("events", key, _find_in_excel(handler, key, value, event_start, handler.nrows), value)
 
-        # 7. Footer Meta (重提取)
+        # 7. 页脚：日期独立扫描；签名自由文本要求人工抽查，不再循环回读生产函数。
         footer = raw_record.get("footer_meta", {})
-        if footer:
-            # 用与提取脚本相同的逻辑重新提取签名和日期
-            event_start = anchors.get("event") or 0
-            _, conc_row = extract_kv_in_range(handler, event_start, handler.nrows)
-            if conc_row is not None:
-                re_sig, re_date = extract_footer_info(handler, conc_row)
+        for key, value in footer.items():
+            if not value:
+                continue
+            if key == "程控日期":
+                add_field("footer", key, _footer_date_oracle(handler, event_start, value), value)
             else:
-                re_sig, re_date = extract_footer_info(handler, event_start)
-            re_footer = {"签名行内容": re_sig, "程控日期": re_date}
-            for key, val in footer.items():
-                if val:
-                    re_val = re_footer.get(key, "__NOT_FOUND__")
-                    add_field("footer", key, re_val or "__NOT_FOUND__", val)
+                add_field("footer", key, "", value, status_override="UNVERIFIED")
 
-        # 8. Antitachy (重提取)
+        # 8. 抗心动过速参数：同样采用独立行/列表头交叉定位。
         antitachy = raw_record.get("antitachy_params", {})
-        if antitachy:
-            at_start = (anchors.get("antitachy") or 0) + 1
-            at_end = anchors.get("test") or handler.nrows
-            re_at = extract_antitachy_table(handler, at_start, at_end)
-            flat_at = {}
-            for rk, cols in re_at.items():
-                if isinstance(cols, dict):
-                    for ck, cv in cols.items():
-                        flat_at[f"{rk}_{ck}"] = cv
-                        flat_at[f"{rk}.{ck}"] = cv
-                else:
-                    flat_at[rk] = cols
-            for key, val in antitachy.items():
-                if isinstance(val, dict):
-                    for k2, v2 in val.items():
-                        composite = f"{key}.{k2}"
-                        re_val = flat_at.get(composite) or flat_at.get(f"{key}_{k2}")
-                        if re_val is not None:
-                            excel_val = re_val or "__NOT_FOUND__"
-                        else:
-                            excel_val = _find_in_excel(handler, k2, v2)
-                        add_field("antitachy", composite, excel_val, v2)
-                else:
-                    re_val = flat_at.get(key)
-                    if re_val is not None:
-                        excel_val = re_val or "__NOT_FOUND__"
-                    else:
-                        excel_val = _find_in_excel(handler, key, val)
-                    add_field("antitachy", key, excel_val, val)
-    except Exception:
-        raise
-    # end audit
+        antitachy_start = anchors["antitachy"] if anchors["antitachy"] is not None else 0
+        antitachy_end = anchors["test"] if anchors["test"] is not None else handler.nrows
+        for key, value in antitachy.items():
+            if isinstance(value, dict):
+                for child_key, child_value in value.items():
+                    composite = f"{key}_{child_key}"
+                    add_field(
+                        "antitachy", composite,
+                        _table_value_oracle(
+                            handler, antitachy_start, antitachy_end, composite,
+                            ZAT_ROW_HEADERS, ZAT_COL_HEADERS,
+                        ),
+                        child_value,
+                    )
+            else:
+                add_field(
+                    "antitachy", key,
+                    _table_value_oracle(
+                        handler, antitachy_start, antitachy_end, key,
+                        ZAT_ROW_HEADERS, ZAT_COL_HEADERS,
+                    ),
+                    value,
+                )
     finally:
         if handler is not None and hasattr(handler, 'close'):
             try:
@@ -338,145 +413,171 @@ def classify_issue(field, filename, fn_count, multi_files):
 # ============================================================
 
 def run_audit(target_file=None, sample_size=None):
+    """执行独立审计，并同时检查源文件与输出记录的覆盖完整性。"""
     DOC_DIR.mkdir(parents=True, exist_ok=True)
-
-    # 收集患者 JSON
-    patient_files = [f for f in PATIENT_RECORDS_DIR.glob("*.json")
-                     if f.name not in ('processed_files.json', 'matching_report.csv')]
+    source_by_id, source_by_filename = build_source_index()
+    patient_files = [
+        path for path in PATIENT_RECORDS_DIR.glob("*.json")
+        if path.name != "processed_files.json"
+    ]
     if not patient_files:
         logger.error("未找到患者记录文件")
-        return
+        return None
 
-    # 收集审计对
+    output_records = []
+    for patient_file in patient_files:
+        output_records.extend(read_extracted_json(patient_file))
+
     audit_pairs = []
-    for pf in patient_files:
-        extracted = read_extracted_json(pf)
-        for src_fn, record_data in extracted.items():
-            if target_file and target_file not in src_fn:
+    unresolved_records = []
+    represented_source_ids = set()
+    for record_data in output_records:
+        source_id = record_data.get("source_id", "")
+        filename = record_data.get("filename", "")
+        if target_file and target_file not in filename:
+            continue
+        source_path = source_by_id.get(source_id)
+        if source_path is None:
+            candidates = source_by_filename.get(filename, [])
+            if len(candidates) == 1:
+                source_path = candidates[0]
+                source_id = stable_source_id(source_path)
+            else:
+                unresolved_records.append({
+                    "filename": filename,
+                    "source_id": source_id,
+                    "reason": "SOURCE_NOT_FOUND" if not candidates else "AMBIGUOUS_FILENAME",
+                })
                 continue
-            src_path = find_source_file(src_fn)
-            if src_path:
-                audit_pairs.append((src_path, src_fn, record_data))
+        represented_source_ids.add(source_id)
+        audit_pairs.append((source_path, source_id, filename, record_data))
 
-    if sample_size and sample_size < len(audit_pairs):
-        audit_pairs = random.sample(audit_pairs, sample_size)
+    sampled = bool(sample_size and sample_size < len(audit_pairs))
+    if sampled:
+        audit_pairs = random.Random(0).sample(audit_pairs, sample_size)
 
-    logger.info(f"审计 {len(audit_pairs)} 条记录...")
+    expected_source_ids = {
+        source_id for source_id, path in source_by_id.items()
+        if not target_file or target_file in os.path.basename(path)
+    }
+    missing_source_ids = [] if sampled else sorted(expected_source_ids - represented_source_ids)
+    logger.info("独立审计 %s 条记录（源文件覆盖 %s/%s）...", len(audit_pairs), len(represented_source_ids), len(expected_source_ids))
 
-    # 构建分类映射
     fn_count, multi_files = build_record_maps()
-
-    # 执行审计
     records = {}
     status_totals = Counter()
     category_totals = Counter()
     section_stats = defaultdict(lambda: {"total": 0, "match": 0, "mismatch": 0, "missing": 0})
-    issues_list = []  # 汇总所有真正需要关注的问题
+    issues_list = []
 
-    for i, (src_path, src_fn, record_data) in enumerate(audit_pairs):
-        if (i + 1) % 50 == 0:
-            logger.info(f"  进度: {i+1}/{len(audit_pairs)}...")
-
+    for index, (source_path, source_id, source_filename, record_data) in enumerate(audit_pairs):
+        if (index + 1) % 50 == 0:
+            logger.info("  进度: %s/%s...", index + 1, len(audit_pairs))
         try:
-            fields = audit_single_record(src_path, record_data)
-        except Exception as e:
-            logger.error(f"审计失败: {src_fn} - {e}")
-            fields = [{"section": "ERROR", "key": "AUDIT", "excel_val": "", "extracted_val": "", "status": "ERROR", "detail": str(e)}]
+            fields = audit_single_record(source_path, record_data)
+        except Exception as error:
+            logger.error("审计失败: %s - %s", source_filename, error)
+            fields = [{
+                "section": "ERROR", "key": "AUDIT", "excel_val": "", "extracted_val": "",
+                "status": "ERROR", "detail": str(error),
+            }]
 
-        # 分类每个字段
         record_fields = []
-        for f in fields:
-            f_copy = dict(f)
-            status_totals[f["status"]] += 1
-            sec = f["section"]
-            section_stats[sec]["total"] += 1
+        for field in fields:
+            field_copy = dict(field)
+            status = field["status"]
+            status_totals[status] += 1
+            section = field["section"]
+            section_stats[section]["total"] += 1
+            if status == "MATCH":
+                section_stats[section]["match"] += 1
+            elif status in ("MISMATCH", "MISSING"):
+                section_stats[section]["mismatch" if status == "MISMATCH" else "missing"] += 1
 
-            if f["status"] == "MATCH":
-                section_stats[sec]["match"] += 1
-            elif f["status"] in ("MISMATCH", "MISSING"):
-                section_stats[sec]["mismatch" if f["status"] == "MISMATCH" else "missing"] += 1
-                category = classify_issue(f, src_fn, fn_count, multi_files)
-                f_copy["category"] = category
+            if status in ("MISMATCH", "MISSING"):
+                category = classify_issue(field, source_filename, fn_count, multi_files)
+                field_copy["category"] = category
                 category_totals[category] += 1
-                if category in ("TRUE_MISMATCH", "EXTRACTION_MISSING"):
-                    issues_list.append({"file": src_fn, **f_copy})
+            elif status not in ("MATCH", "UNVERIFIED"):
+                field_copy["category"] = f"AUDIT_{status}"
+                category_totals[field_copy["category"]] += 1
 
-            record_fields.append(f_copy)
+            if status not in ("MATCH", "UNVERIFIED"):
+                issues_list.append({"file": source_filename, "source_id": source_id, **field_copy})
+            record_fields.append(field_copy)
 
-        rec_match = sum(1 for f in record_fields if f["status"] == "MATCH")
-        rec_total = len(record_fields)
-        records[src_fn] = {
+        verified = [field for field in record_fields if field["status"] not in ("UNVERIFIED",)]
+        match_count = sum(1 for field in verified if field["status"] == "MATCH")
+        record_key = source_id or f"{source_filename}#{index}"
+        records[record_key] = {
+            "filename": source_filename,
             "fields": record_fields,
             "summary": {
-                "total": rec_total,
-                "match": rec_match,
-                "accuracy": round(rec_match / rec_total, 4) if rec_total else 0,
-            }
+                "total": len(record_fields),
+                "verified": len(verified),
+                "match": match_count,
+                "accuracy": round(match_count / len(verified), 4) if verified else None,
+            },
         }
 
-    # 汇总
     total_fields = sum(status_totals.values())
+    verified_total = total_fields - status_totals.get("UNVERIFIED", 0)
     total_match = status_totals.get("MATCH", 0)
+    accuracy = round(total_match / verified_total, 4) if verified_total else None
+    missing_source_records = [
+        {"source_id": source_id, "filename": os.path.basename(source_by_id[source_id])}
+        for source_id in missing_source_ids
+    ]
 
-    # 准确率：排除 CROSS_SHEET（数据源多sheet问题，非提取错误）
-    cross_sheet_noise = category_totals.get("CROSS_SHEET", 0)
-    effective_issues = (status_totals.get("MISMATCH", 0) + status_totals.get("MISSING", 0)) - cross_sheet_noise
-    effective_verified = total_match + effective_issues
-    accuracy = round(total_match / effective_verified, 4) if effective_verified else 0
-
-    # 可忽略 vs 需关注（CROSS_SHEET 单独标注）
-    noise_cats = {"CROSS_SHEET"}  # 不计入准确率的噪音
-    ignorable_cats = {"NAME_TYPO", "CROSS_RECORD", "ARROW_VALUE",
-                       "SYMBOL_PREFIX", "EXCEL_ERROR", "DATE_FORMAT", "NUMERIC_NOISE"}
-    noise = sum(v for k, v in category_totals.items() if k in noise_cats)
-    ignorable = sum(v for k, v in category_totals.items() if k in ignorable_cats)
-    actionable = sum(v for k, v in category_totals.items() if k not in noise_cats and k not in ignorable_cats)
+    # 身份不一致、幻影字段、歧义和覆盖缺失都不能再被计入“可忽略问题”。
+    ignorable_cats = {"ARROW_VALUE", "SYMBOL_PREFIX", "EXCEL_ERROR", "DATE_FORMAT", "NUMERIC_NOISE"}
+    ignorable = sum(value for key, value in category_totals.items() if key in ignorable_cats)
+    actionable = len(issues_list) + len(unresolved_records) + len(missing_source_records)
+    coverage_complete = not sampled and not unresolved_records and not missing_source_records
 
     result = {
         "meta": {
             "timestamp": datetime.now().isoformat(),
+            "audit_method": "independent_oracle_v1",
+            "sampled": sampled,
             "total_records": len(records),
             "total_fields": total_fields,
+        },
+        "coverage": {
+            "source_files": len(expected_source_ids),
+            "represented_source_files": len(represented_source_ids),
+            "complete": coverage_complete,
+            "unresolved_output_records": unresolved_records,
+            "missing_source_records": missing_source_records,
         },
         "summary": {
             "by_status": dict(status_totals),
             "by_category": dict(category_totals),
-            "by_section": {k: dict(v) for k, v in section_stats.items()},
+            "by_section": {key: dict(value) for key, value in section_stats.items()},
             "accuracy": accuracy,
-            "cross_sheet_noise": noise,
+            "verified_fields": verified_total,
+            "unverified_fields": status_totals.get("UNVERIFIED", 0),
             "ignorable_issues": ignorable,
             "actionable_issues": actionable,
         },
-        "actionable_issues": issues_list[:200],  # 截断防文件过大
+        "actionable_issues": issues_list[:200],
         "records": records,
     }
+    atomic_write_json(AUDIT_JSON, result)
 
-    with open(AUDIT_JSON, 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-
-    # 终端摘要
     print("=" * 60)
-    print(f"审计完成 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"独立审计完成 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
     print(f"记录数: {len(records)}   字段数: {total_fields}")
-    print(f"")
-    print(f"匹配状态:")
-    for s in ("MATCH", "MISMATCH", "MISSING", "NOT_FOUND", "PHANTOM", "ERROR"):
-        if status_totals.get(s, 0) > 0:
-            print(f"  {s}: {status_totals[s]}")
-    print(f"")
-    print(f"问题分类 ({sum(category_totals.values())} 条):")
-    all_skip = noise_cats | ignorable_cats
-    for cat, cnt in category_totals.most_common():
-        tag = "[noise]" if cat in noise_cats else ("[skip]" if cat in ignorable_cats else "[FIX!]")
-        print(f"  {tag} {cat}: {cnt}")
-    print(f"")
-    print(f"准确率 (排除多sheet噪音+无法验证): {accuracy*100:.1f}%")
-    print(f"多sheet噪音: {noise}   可忽略: {ignorable}   需修复: {actionable}")
-    print(f"")
+    print(f"源文件覆盖: {len(represented_source_ids)}/{len(expected_source_ids)}   完整: {coverage_complete}")
+    print("匹配状态:")
+    for status in ("MATCH", "MISMATCH", "MISSING", "NOT_FOUND", "PHANTOM", "AMBIGUOUS", "UNVERIFIED", "ERROR"):
+        if status_totals.get(status, 0) > 0:
+            print(f"  {status}: {status_totals[status]}")
+    print(f"独立可验证字段准确率: {'N/A' if accuracy is None else f'{accuracy * 100:.1f}%'}")
+    print(f"需关注: {actionable}   仅人工复核: {status_totals.get('UNVERIFIED', 0)}")
     print(f"JSON 报告: {AUDIT_JSON}")
     print("=" * 60)
-
     return result
 
 

@@ -1,0 +1,24 @@
+{
+  "root": "E:\\Pacemarker_Dashboard\\SCI论文写作",
+  "audit_date": "2026-06-30",
+  "skill": "qinchao-sci-workflow",
+  "errors": [],
+  "warnings": [],
+  "info": [
+    {
+      "path": "01_data/analysis_ready",
+      "message": "No structured analysis-ready files found yet"
+    }
+  ],
+  "summary": {
+    "files_scanned": 28,
+    "errors": 0,
+    "warnings": 0,
+    "info": 1,
+    "active_manuscript_candidates": 1,
+    "table_outputs": 0,
+    "figure_outputs": 0
+  },
+  "interpretation": "Standard SCI scaffold is complete. The remaining info item is expected because formal data freeze and analysis-ready exports have not started."
+}
+

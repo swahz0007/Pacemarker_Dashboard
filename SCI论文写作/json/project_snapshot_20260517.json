@@ -1,0 +1,106 @@
+{
+  "snapshot_date": "2026-05-17",
+  "project": "Pacemaker Dashboard",
+  "positioning": "continuously growing real-world CIED programming report database",
+  "source_paths": {
+    "patient_records": "patient_records/*.json",
+    "matching_report": "patient_records/matching_report.csv",
+    "audit_result": "doc/audit_result.json",
+    "dashboard_bundle": "dashboard_ui/data/data_bundle.js"
+  },
+  "patient_and_record_counts": {
+    "patient_json_files": 917,
+    "loaded_patient_objects": 917,
+    "standard_registration_patients": 885,
+    "proxy_or_nonstandard_patients": 32,
+    "programming_records": 1363,
+    "patients_ge2_records": 295,
+    "patients_ge3_records": 113,
+    "max_records_per_patient": 6,
+    "month_range": [
+      "2025-02",
+      "2026-05"
+    ],
+    "month_count": 16
+  },
+  "record_count_distribution": {
+    "1": 622,
+    "2": 182,
+    "3": 86,
+    "4": 19,
+    "5": 5,
+    "6": 3
+  },
+  "brand_latest_patient": {
+    "雅培": 502,
+    "美敦力": 374,
+    "百多力": 27,
+    "Unknown": 8,
+    "波士顿科学": 3,
+    "vitatron": 1,
+    "创领": 1,
+    "Vitatron": 1
+  },
+  "sex_latest_patient": {
+    "女": 483,
+    "男": 423,
+    "Unknown": 11
+  },
+  "device_record_mentions": {
+    "Pacemaker": 1127,
+    "ICD": 128,
+    "CRT-P": 40,
+    "Micra AV": 37,
+    "CRT-D": 28,
+    "EV-ICD": 3
+  },
+  "field_availability_records": {
+    "battery_voltage": 1269,
+    "estimated_life": 1165,
+    "rv_threshold": 1336,
+    "rv_impedance": 1329,
+    "rv_sensing": 1329,
+    "conclusion": 1315,
+    "next_followup": 1227,
+    "event_text": 6,
+    "denominator": 1363
+  },
+  "audit": {
+    "timestamp": "2026-05-11T15:54:32.591552",
+    "total_records": 1064,
+    "total_fields": 51047,
+    "by_status": {
+      "MATCH": 48315,
+      "MISMATCH": 2170,
+      "NOT_FOUND": 316,
+      "MISSING": 246
+    },
+    "by_category": {
+      "CROSS_SHEET": 2407,
+      "NAME_TYPO": 9
+    },
+    "accuracy_after_categorization": 0.9998,
+    "actionable_issues": 0
+  },
+  "matching_report": {
+    "rows": 1355,
+    "status": {
+      "Match": 1347,
+      "No Match": 7,
+      "Match (Vitatron->Medtronic)": 1
+    },
+    "detected_type_records": {
+      "起搏器报告单": 1160,
+      "ICD报告单": 126,
+      "CRT-P报告单": 40,
+      "CRT-D报告单": 26,
+      "EV-ICD报告单": 3
+    }
+  },
+  "boundary": {
+    "manual_clinical_outcome_collection": false,
+    "current_data_scope": "programming reports only",
+    "clinical_outcomes": "reserved for future automated linkage if available"
+  }
+}
+

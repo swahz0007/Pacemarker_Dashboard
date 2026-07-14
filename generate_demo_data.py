@@ -1,7 +1,7 @@
 """
 Pacemaker Dashboard - Demo Data Generator
 ==========================================
-从私有仓库中抽取50份病历，彻底脱敏后生成纯前端展示 Demo。
+历史 Demo 生成脚本（已停用）。
 - 读取 patient_records/*.json
 - 随机抽取50份，替换所有隐私字段
 - 复制前端文件到 Demo 目录
@@ -172,7 +172,7 @@ def create_readme():
     print("   ✅ README.md")
 
 
-def main():
+def legacy_main():
     print("=" * 60)
     print("  Pacemaker Dashboard - Demo Data Generator")
     print("=" * 60)
@@ -266,5 +266,11 @@ def main():
     print("  git push -u origin master")
 
 
+def main():
+    print("此历史 Demo 生成链路已停用：它不具备当前的 fail-closed 脱敏与泄露审计能力。")
+    print("请改用 dashboard_ui/scripts/build_netlify_preview.py 构建可发布的脱敏包。")
+    return 1
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

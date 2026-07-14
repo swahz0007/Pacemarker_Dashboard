@@ -1,0 +1,22 @@
+{
+  "name": "pacemaker-dashboard",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:identity": "node dashboard_ui/scripts/build_identity_client.mjs",
+    "build:preview": "python dashboard_ui/scripts/build_netlify_preview.py --source-bundle dashboard_ui/demo_data/data_bundle.js --output-dir netlify_publish",
+    "build": "npm run build:identity && npm run build:preview",
+    "check:js": "node --check dashboard_ui/assets/js/app.js && node --check dashboard_ui/assets/js/auth-entry.js",
+    "test": "python -m unittest discover -s tests -p \"test_*.py\"",
+    "check": "npm run build:identity && npm run check:js && npm run test"
+  },
+  "dependencies": {
+    "@netlify/identity": "1.2.0",
+    "chart.js": "4.5.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "netlify-cli": "26.2.0"
+  }
+}

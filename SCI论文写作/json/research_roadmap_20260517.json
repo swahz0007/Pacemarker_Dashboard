@@ -1,0 +1,55 @@
+{
+  "snapshot_date": "2026-05-17",
+  "overall_strategy": "Use the current dashboard and structured programming report pipeline as the foundation of a continuously growing CIED real-world database. The 8000 CNY self-funded project should close with a research report and platform deliverables; each later SCI paper should preferably support a separate higher-level grant.",
+  "hard_boundaries": [
+    "Do not manually collect clinical outcomes at the current stage.",
+    "Do not rely on death, hospitalization, emergency visits, heart failure worsening, reoperation, infection, or lead revision as current endpoints.",
+    "Use programming report data first: device identity, programming date, implant date, settings, battery, thresholds, impedance, sensing, events, conclusions, and follow-up recommendation.",
+    "Use clinical outcomes only if they become available through automated institutional or manufacturer-supported linkage."
+  ],
+  "stages": [
+    {
+      "stage": 0,
+      "grant_level": "8000 CNY self-funded project",
+      "topic": "起搏器程控报告结构化整理与可视化管理平台建设",
+      "role": "foundation",
+      "deliverables": [
+        "research report",
+        "dashboard platform",
+        "900+ patient-level structured data",
+        "data processing workflow",
+        "stage data snapshot and quality summary"
+      ],
+      "sci_commitment": "do not make SCI a hard closing requirement"
+    },
+    {
+      "stage": 1,
+      "grant_level": "about 50000 CNY",
+      "topic": "多品牌 CIED 程控报告结构化数据库构建与字段级质控研究",
+      "corresponding_paper": "SCI 1: database construction and field-level audit",
+      "role": "methods and digital health"
+    },
+    {
+      "stage": 2,
+      "grant_level": "about 50000 CNY",
+      "topic": "中国三甲医院 CIED 程控报告真实世界特征及随访模式回顾性研究",
+      "corresponding_paper": "SCI 2: tertiary-hospital real-world retrospective programming report analysis",
+      "role": "clinical real-world analysis"
+    },
+    {
+      "stage": 3,
+      "grant_level": "future grant or horizontal project",
+      "topic": "CIED 程控参数纵向轨迹与亚组研究",
+      "corresponding_paper": "longitudinal and subgroup papers",
+      "role": "follow-up data expansion"
+    },
+    {
+      "stage": 4,
+      "grant_level": "future high-level project if automated outcomes are available",
+      "topic": "CIED 程控参数与临床结局关联研究",
+      "corresponding_paper": "outcome linkage and prediction papers",
+      "role": "optional advanced extension"
+    }
+  ]
+}
+

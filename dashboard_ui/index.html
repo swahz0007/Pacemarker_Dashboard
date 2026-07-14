@@ -4,19 +4,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pacemaker Dashboard</title>
-    <link rel="stylesheet" href="assets/css/style.css?v=302">
-    <!-- Google Fonts for Medical Aesthetic -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://npm.elemecdn.com/lxgw-wenkai-screen-webfont@1.1.0/style.css" media="print"
-        onload="this.media='all'">
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>起搏器程控研究平台</title>
+    <script>
+        (() => {
+            const allowedThemes = new Set(['pixel', 'light', 'dark']);
+            const themeVersion = 'pixel-v2';
+            try {
+                const savedTheme = localStorage.getItem('pm_theme');
+                const savedVersion = localStorage.getItem('pm_theme_version');
+                const initialTheme = savedVersion === themeVersion && allowedThemes.has(savedTheme)
+                    ? savedTheme
+                    : 'pixel';
+                document.documentElement.dataset.theme = initialTheme;
+                localStorage.setItem('pm_theme', initialTheme);
+                localStorage.setItem('pm_theme_version', themeVersion);
+            } catch (_) {
+                document.documentElement.dataset.theme = 'pixel';
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="assets/css/style.css?v=318">
 </head>
 
 <body>
-    <div class="app-container">
+    <div id="appContainer" class="app-container" hidden>
         <!-- Sidebar: Patient List -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -31,52 +42,61 @@
             </div>
             <div class="sidebar-footer">
                 <span class="archive-count">共 <span id="patientCount">0</span> 份档案</span>
-                <button id="themeToggleBtn" class="theme-toggle-btn" type="button" title="切换主题" aria-label="切换主题">
-                    <span class="icon">🌓</span>
-                    <span class="theme-label">切换主题</span>
+                <span class="auth-user-label">公开脱敏演示</span>
+                <button id="themeToggleBtn" class="theme-toggle-btn" type="button" title="切换界面主题" aria-label="切换界面主题">
+                    <span class="icon" aria-hidden="true">▦</span>
+                    <span class="theme-label">像素主题</span>
+                </button>
+                <button id="displaySettingsBtn" class="display-settings-btn" type="button" title="打开字体与显示设置" aria-label="打开字体与显示设置" aria-controls="displaySettingsOverlay" aria-expanded="false">
+                    <span class="icon" aria-hidden="true">A</span>
+                    <span>字体与显示</span>
                 </button>
             </div>
         </aside>
 
         <!-- Main Content: Patient Details -->
         <main class="main-content" id="mainContent">
+            <aside class="clinical-safety-notice" role="note" aria-label="临床使用说明">
+                <strong>研究辅助</strong>
+                <span>本系统仅用于数据整理与研究辅助；请以原始程控报告、设备状态和临床判断为准，不用于临床决策。</span>
+            </aside>
             <!-- Dashboard Overview -->
             <div id="dashboardView" class="dashboard-view">
                 <div class="dashboard-header">
                     <div>
-                        <h2>📊 数据总览</h2>
+                        <h2><span class="title-pixel-icon" aria-hidden="true">▦</span> 数据总览</h2>
                         <p class="dashboard-subtitle">起搏器程控数据库统计分析</p>
                     </div>
                     <button id="fullscreenBtn" class="fullscreen-btn" title="全屏大屏模式">
-                        🖥️ 大屏模式
+                        <span aria-hidden="true">□</span> 大屏模式
                     </button>
                 </div>
 
                 <!-- KPI Cards Row -->
                 <div class="kpi-row">
                     <div class="kpi-card">
-                        <div class="kpi-icon">👥</div>
+                        <div class="kpi-icon" aria-hidden="true">01</div>
                         <div class="kpi-body">
                             <span class="kpi-value" id="kpiTotalPatients">0</span>
                             <span class="kpi-label">患者总数</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon">🏭</div>
+                        <div class="kpi-icon" aria-hidden="true">02</div>
                         <div class="kpi-body">
                             <span class="kpi-value" id="kpiBrandCount">0</span>
                             <span class="kpi-label">设备品牌</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon">📋</div>
+                        <div class="kpi-icon" aria-hidden="true">03</div>
                         <div class="kpi-body">
                             <span class="kpi-value" id="kpiAvgVisits">0</span>
                             <span class="kpi-label">平均程控次数</span>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-icon">📅</div>
+                        <div class="kpi-icon" aria-hidden="true">04</div>
                         <div class="kpi-body">
                             <span class="kpi-value" id="kpiLatestImplant">--</span>
                             <span class="kpi-label">最新植入日期</span>
@@ -88,33 +108,33 @@
                 <div class="dashboard-grid">
                     <!-- Row 1 -->
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">🏭</span> 品牌分布</h3>
+                        <h3><span class="icon" aria-hidden="true">◆</span> 品牌分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartBrand"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">📱</span> 型号 Top 10</h3>
+                        <h3><span class="icon" aria-hidden="true">▣</span> 型号 Top 10</h3>
                         <div class="dash-chart-wrap dash-chart-bar">
                             <canvas id="chartModel"></canvas>
                         </div>
                     </div>
                     <!-- Row 2 -->
                     <div class="card dash-chart-card full-width">
-                        <h3><span class="icon">📈</span> 植入年份趋势</h3>
+                        <h3><span class="icon" aria-hidden="true">↗</span> 植入年份趋势</h3>
                         <div class="dash-chart-wrap dash-chart-line">
                             <canvas id="chartYearTrend"></canvas>
                         </div>
                     </div>
                     <!-- Row 3 -->
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">🔢</span> 程控次数分布</h3>
+                        <h3><span class="icon" aria-hidden="true">#</span> 程控次数分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartVisitDist"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">⏱️</span> 设备使用年限</h3>
+                        <h3><span class="icon" aria-hidden="true">T</span> 设备使用年限</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartDeviceAge"></canvas>
                         </div>
@@ -122,44 +142,48 @@
                 </div>
 
                 <!-- Deep Statistics Section -->
-                <div class="dashboard-section-title">
-                    <h2>🔬 深度临床统计</h2>
-                    <p class="dashboard-subtitle">基于全部程控记录的深度数据挖掘</p>
+                <div class="dashboard-section-title analytics-title">
+                    <div>
+                        <h2><span class="title-pixel-icon" aria-hidden="true">+</span> 深度研究统计</h2>
+                        <p class="dashboard-subtitle">经授权后按需加载脱敏程控记录，生成研究辅助统计。</p>
+                    </div>
+                    <button id="loadResearchAnalytics" class="analytics-load-btn" type="button">加载研究统计</button>
                 </div>
+                <p id="researchAnalyticsStatus" class="analytics-status">尚未加载逐例记录。</p>
 
                 <div class="dashboard-grid">
                     <!-- Row 4 -->
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">💓</span> 起搏模式分布</h3>
+                        <h3><span class="icon" aria-hidden="true">M</span> 起搏模式分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartPacingMode"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">🔋</span> 电池电压分布</h3>
+                        <h3><span class="icon" aria-hidden="true">B</span> 电池电压分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartBatteryVolt"></canvas>
                         </div>
                     </div>
                     <!-- Row 5 -->
                     <div class="card dash-chart-card full-width">
-                        <h3><span class="icon">📅</span> 月度程控量趋势</h3>
+                        <h3><span class="icon" aria-hidden="true">≋</span> 月度程控量趋势</h3>
                         <div class="dash-chart-wrap dash-chart-line">
                             <canvas id="chartMonthlyTrend"></canvas>
                         </div>
                     </div>
                     <!-- Row 6 -->
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">⚡</span> AT/AF 负荷分布</h3>
+                        <h3><span class="icon" aria-hidden="true">A</span> AT/AF 负荷分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartAfBurden"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card alert-list-card">
-                        <h3><span class="icon">🚨</span> 电池预警患者</h3>
+                        <h3><span class="icon" aria-hidden="true">!</span> 设备状态提示</h3>
                         <div class="alert-list-wrap">
                             <div id="batteryAlertList" class="battery-alert-list">
-                                <p class="text-muted">加载中...</p>
+                                <p class="text-muted">等待加载研究统计。</p>
                             </div>
                         </div>
                     </div>
@@ -167,30 +191,85 @@
 
                 <!-- Lead Parameters Section -->
                 <div class="dashboard-section-title">
-                    <h2>🔌 导线参数 & 随访依从性</h2>
+                        <h2><span class="title-pixel-icon" aria-hidden="true">L</span> 导线参数与随访依从性</h2>
                     <p class="dashboard-subtitle">阻抗、阈值分布与随访次数分析</p>
                 </div>
 
                 <div class="dashboard-grid">
                     <div class="card dash-chart-card full-width">
-                        <h3><span class="icon">📊</span> 导线阻抗分布 (RA / RV / LV)</h3>
+                        <h3><span class="icon" aria-hidden="true">Ω</span> 导线阻抗分布 (RA / RV / LV)</h3>
                         <div class="dash-chart-wrap dash-chart-line">
                             <canvas id="chartImpedance"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">⚡</span> 起搏阈值分布</h3>
+                        <h3><span class="icon" aria-hidden="true">V</span> 起搏阈值分布</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartThreshold"></canvas>
                         </div>
                     </div>
                     <div class="card dash-chart-card">
-                        <h3><span class="icon">📋</span> 随访依从性</h3>
+                        <h3><span class="icon" aria-hidden="true">✓</span> 随访依从性</h3>
                         <div class="dash-chart-wrap">
                             <canvas id="chartCompliance"></canvas>
                         </div>
                     </div>
                 </div>
+
+                <!-- Data Quality & Manual Review: intentionally low-priority and collapsed by default -->
+                <details id="qualityCenter" class="quality-center hidden">
+                    <summary class="quality-collapsible-summary">
+                        <span class="quality-summary-copy">
+                            <span class="quality-summary-icon" aria-hidden="true">!</span>
+                            <span>
+                                <strong id="qualityCenterTitle">数据质量与人工核查</strong>
+                                <small>处理异常与矛盾病例</small>
+                            </span>
+                        </span>
+                        <span class="quality-summary-actions">
+                            <span id="qualityPendingBadge" class="quality-pending-badge">待核查 0</span>
+                            <span class="quality-readonly-badge">本机状态</span>
+                            <span class="quality-expand-hint">展开详情</span>
+                        </span>
+                    </summary>
+                    <div class="quality-center-body">
+                        <div id="qualityPipelineWarning" class="quality-pipeline-warning hidden" role="alert"></div>
+                        <div id="qualitySummary" class="quality-summary-grid"></div>
+                        <p class="quality-local-note">核查状态和备注仅保存在本机浏览器，不修改原始 Excel，也不写入 NAS。</p>
+                        <div class="quality-toolbar" aria-label="核查筛选">
+                            <label>
+                                问题类型
+                                <select id="qualityTypeFilter">
+                                    <option value="all">全部问题</option>
+                                </select>
+                            </label>
+                            <label>
+                                严重级别
+                                <select id="qualitySeverityFilter">
+                                    <option value="all">全部级别</option>
+                                    <option value="blocker">阻断</option>
+                                    <option value="review">待核查</option>
+                                </select>
+                            </label>
+                            <label>
+                                处理状态
+                                <select id="qualityStatusFilter">
+                                    <option value="all">全部状态</option>
+                                    <option value="pending">待核查</option>
+                                    <option value="confirmed">已确认原报告无误</option>
+                                    <option value="corrected">源文件已修正</option>
+                                    <option value="ignored">暂时忽略</option>
+                                </select>
+                            </label>
+                            <label class="quality-search-label">
+                                关键词
+                                <input id="qualitySearch" type="search" placeholder="患者、文件名或路径..." autocomplete="off">
+                            </label>
+                        </div>
+                        <p id="qualityStatus" class="quality-status" aria-live="polite"></p>
+                        <div id="qualityIssueList" class="quality-issue-list"></div>
+                    </div>
+                </details>
             </div>
 
             <!-- Detail View (Hidden by default) -->
@@ -203,7 +282,7 @@
                 <header class="patient-header">
                     <div class="patient-info">
                         <h1 id="pName">Patient Name</h1>
-                        <span class="badge id-badge" id="pId">ID: 000000</span>
+                        <span class="badge id-badge" id="pId">登记号 000000</span>
                     </div>
                     <div class="device-info">
                         <div class="device-meta">
@@ -233,63 +312,63 @@
                     <!-- Tab: Overview -->
                     <section id="overview" class="tab-pane active">
                         <div class="grid-container">
-                            <!-- Helper Card: Conclusion & Next Visit -->
-                            <div class="card full-width summary-card">
-                                <h3><span class="icon">📋</span> 本次程控总结</h3>
+                            <!-- Core Conclusion & Follow-up -->
+                            <div class="card full-width summary-card conclusion-card">
+                                <h3><span class="icon" aria-hidden="true">S</span> 本次程控总结</h3>
                                 <div class="card-body horizontal-split">
-                                    <div class="split-section">
-                                        <span class="label">程控结论</span>
-                                        <p class="text-highlight" id="visitConclusion">--</p>
+                                    <div class="split-section conclusion-section">
+                                        <span class="label">核心结论</span>
+                                        <p class="text-highlight conclusion-text" id="visitConclusion" aria-live="polite">--</p>
                                     </div>
                                     <div class="divider-vertical"></div>
-                                    <div class="split-section">
+                                    <div class="split-section followup-section">
                                         <span class="label">建议下次随访</span>
-                                        <p class="text-accent" id="nextVisitDate">--</p>
+                                        <p class="text-accent followup-text" id="nextVisitDate" aria-live="polite">--</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Battery + Mode Card (combined) -->
-                            <div class="card highlight-card compact-card">
-                                <h3><span class="icon">🔋</span> 电池与起搏</h3>
-                                <div class="compact-content">
-                                    <span class="compact-item">
-                                        <span class="item-label">电池</span>
-                                        <span class="item-value"><span id="batStatus">--</span> V</span>
-                                        <span class="item-sub" id="batLife">预估 -- 年</span>
-                                    </span>
-                                    <span class="compact-divider">|</span>
-                                    <span class="compact-item">
-                                        <span class="item-label">模式</span>
-                                        <span class="item-value" id="pacingMode">--</span>
-                                        <span class="item-sub"><span id="lowerRate">--</span>/<span
-                                                id="upperRate">--</span> bpm</span>
-                                    </span>
+                            <!-- Events & Conclusion Reading Card -->
+                            <div class="card alert-card full-width events-card">
+                                <h3><span class="icon" aria-hidden="true">!</span> 事件与需关注信息</h3>
+                                <div class="event-content">
+                                    <div class="event-item"><span class="event-label">AMS</span><b id="amsSwitch" aria-live="polite">--</b></div>
+                                    <div class="event-item"><span class="event-label">AT/AF</span><b id="atafLoad" aria-live="polite">--</b></div>
+                                    <div class="event-item"><span class="event-label">VT</span><b id="vtEvents" aria-live="polite">--</b></div>
+                                    <div class="event-item"><span class="event-label">其他</span><b id="otherEvents" aria-live="polite">--</b></div>
                                 </div>
                             </div>
 
-                            <!-- Events Card (full width) -->
-                            <div class="card alert-card full-width">
-                                <h3><span class="icon">⚠️</span> 关键事件</h3>
-                                <div class="event-content">
-                                    <span class="event-item">AMS: <b id="amsSwitch">--</b></span>
-                                    <span class="event-item">AT/AF: <b id="atafLoad">--</b></span>
-                                    <span class="event-item">VT: <b id="vtEvents">--</b></span>
-                                    <span class="event-item">其他: <b id="otherEvents">--</b></span>
+                            <!-- Battery + Pacing Parameters -->
+                            <div class="card full-width highlight-card parameter-card">
+                                <h3><span class="icon" aria-hidden="true">B</span> [B] 电池与起搏参数</h3>
+                                <div class="device-param-grid">
+                                    <div class="device-param-item">
+                                        <span class="device-param-label">电池电压</span>
+                                        <strong class="device-param-value"><span id="batStatus">--</span><small> V</small></strong>
+                                        <span class="device-param-sub" id="batLife">预估剩余：--</span>
+                                    </div>
+                                    <div class="device-param-item">
+                                        <span class="device-param-label">起搏设置</span>
+                                        <strong class="device-param-value" id="pacingMode">--</strong>
+                                        <span class="device-param-sub">基础频率：<b id="lowerRate">--</b> bpm</span>
+                                        <span class="device-param-sub">上限频率：<b id="upperRate">--</b> bpm</span>
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Lead Status (Dynamic Grid) -->
-                            <div class="card full-width table-card">
-                                <h3><span class="icon">🔌</span> 导线状态 (最新程控)</h3>
+                            <div class="card full-width table-card threshold-card">
+                                <h3><span class="icon" aria-hidden="true">V</span> [V] 阈值测试与导线参数</h3>
+                                <p class="parameter-note">仅显示报告中实际提供数据的腔室；“—”表示原报告未提供该项。</p>
                                 <div class="table-scroll">
                                     <table class="medical-table">
                                         <thead>
                                             <tr>
                                                 <th>腔室</th>
-                                                <th>阻抗 (Ω)</th>
-                                                <th>感知 (mV)</th>
-                                                <th>阈值 (V)</th>
+                                                <th>阻抗（Ω）</th>
+                                                <th>感知（mV）</th>
+                                                <th>阈值（V）</th>
                                                 <th>输出</th>
                                             </tr>
                                         </thead>
@@ -302,8 +381,8 @@
 
                             <!-- Trends Chart Container -->
                             <div class="card full-width">
-                                <h3><span class="icon">📈</span> 关键参数趋势图</h3>
-                                <div class="chart-container" style="position: relative; height:250px; width:100%">
+                                <h3><span class="icon" aria-hidden="true">↗</span> 关键参数趋势图</h3>
+                                <div class="chart-container">
                                     <canvas id="trendsChart"></canvas>
                                 </div>
                             </div>
@@ -334,8 +413,82 @@
             </div>
         </div>
     </div>
-    <script src="data/data_bundle.js"></script>
-    <script src="assets/js/app.js?v=302"></script>
+    <!-- Local display preferences: affects this browser only, never patient data. -->
+    <div id="displaySettingsOverlay" class="display-settings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="displaySettingsTitle">
+        <div class="display-settings-panel">
+            <div class="display-settings-header">
+                <div>
+                    <h2 id="displaySettingsTitle">字体与显示</h2>
+                    <p>仅调整本机显示，不修改患者数据。</p>
+                </div>
+                <button id="displaySettingsClose" class="display-settings-close" type="button" title="关闭设置" aria-label="关闭设置">&times;</button>
+            </div>
+            <div class="display-settings-grid">
+                <label class="display-setting-row" for="displayDensitySelect">
+                    <span>界面密度</span>
+                    <select id="displayDensitySelect">
+                        <option value="compact">紧凑</option>
+                        <option value="standard">标准</option>
+                        <option value="large">宽松</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayListFontSelect">
+                    <span>患者列表字号</span>
+                    <select id="displayListFontSelect">
+                        <option value="small">小</option>
+                        <option value="standard">标准</option>
+                        <option value="large">大</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayParamLabelSelect">
+                    <span>参数标签</span>
+                    <select id="displayParamLabelSelect">
+                        <option value="small">小</option>
+                        <option value="standard">标准</option>
+                        <option value="large">大</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayParamValueSelect">
+                    <span>参数数值</span>
+                    <select id="displayParamValueSelect">
+                        <option value="small">小</option>
+                        <option value="standard">标准</option>
+                        <option value="large">大</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayConclusionSizeSelect">
+                    <span>核心结论字号</span>
+                    <select id="displayConclusionSizeSelect">
+                        <option value="small">小</option>
+                        <option value="standard">标准</option>
+                        <option value="large">大</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayConclusionWeightSelect">
+                    <span>核心结论字重</span>
+                    <select id="displayConclusionWeightSelect">
+                        <option value="normal">标准</option>
+                        <option value="strong">醒目</option>
+                        <option value="extra">更醒目</option>
+                    </select>
+                </label>
+                <label class="display-setting-row" for="displayConclusionToneSelect">
+                    <span>核心结论颜色</span>
+                    <select id="displayConclusionToneSelect">
+                        <option value="theme">跟随主题</option>
+                        <option value="primary">蓝色强调</option>
+                        <option value="contrast">高对比</option>
+                    </select>
+                </label>
+            </div>
+            <div class="display-settings-footer">
+                <span id="displaySettingsStatus" role="status" aria-live="polite">设置保存在本机浏览器。</span>
+                <button id="displaySettingsReset" class="display-settings-reset" type="button">恢复默认</button>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/identity-client.js?v=2"></script>
+    <script src="assets/js/app.js?v=318"></script>
 
 </body>
 
